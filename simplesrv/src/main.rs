@@ -19,10 +19,7 @@ use std::{
     net::{TcpListener, TcpStream},
 };
 
-use kafka_api::{
-    api_versions_request::ApiVersionsRequest, apikey::ApiMessageType, util::read_request_header,
-    Decodable,
-};
+use kafka_api::Request;
 use tracing::{error, error_span, info, Level};
 
 fn main() -> io::Result<()> {
@@ -43,6 +40,9 @@ fn main() -> io::Result<()> {
                 match dispatch(socket) {
                     Ok(()) => {
                         info!("connection closed");
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
+                        info!("connection closed by client")
                     }
                     Err(err) => {
                         error!(?err, "connection failed");
@@ -66,15 +66,7 @@ fn dispatch(mut socket: TcpStream) -> io::Result<()> {
             buf
         };
         let mut cursor = Cursor::new(buf.as_slice());
-        let request_header = read_request_header(&mut cursor)?;
-        let api_type = ApiMessageType::try_from(request_header.request_api_key)?;
-        let api_version = request_header.request_api_version;
-        match api_type {
-            ApiMessageType::ApiVersions => {
-                let request = ApiVersionsRequest::decode(&mut cursor, api_version)?;
-                info!("Receive request {request:?}");
-            }
-            _ => unimplemented!("{}", api_type.api_key),
-        }
+        let request = Request::decode(&mut cursor)?;
+        info!("Receive request {request:?}");
     }
 }
