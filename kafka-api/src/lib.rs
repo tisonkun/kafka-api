@@ -18,6 +18,7 @@ use std::{error, fmt::Display, io};
 
 pub use codec::{Decodable, Encodable, RawTaggedField};
 
+pub mod apikey;
 pub(crate) mod codec;
 
 fn err_io_other<E>(error: E) -> io::Error
