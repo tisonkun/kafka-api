@@ -21,3 +21,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+kafka-api = { path = "../kafka-api" }
+
+tracing = "0.1.37"
+tracing-subscriber = "0.3.17"
