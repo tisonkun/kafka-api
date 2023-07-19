@@ -18,7 +18,7 @@ use bytes::BufMut;
 
 use crate::{codec::*, err_encode_message_unsupported};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CreateTopicsResponse {
     /// The duration in milliseconds for which the request was throttled due to a quota violation,
     /// or zero if the request did not violate any quota.
@@ -42,7 +42,7 @@ impl Encodable for CreateTopicsResponse {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CreatableTopicResult {
     /// The topic name.
     pub name: String,
@@ -94,7 +94,7 @@ impl Encodable for CreatableTopicResult {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CreatableTopicConfigs {
     /// The configuration name.
     pub name: String,

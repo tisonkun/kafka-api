@@ -18,7 +18,7 @@ use bytes::Buf;
 
 use crate::codec::*;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct InitProducerIdRequest {
     /// The transactional id, or null if the producer is not transactional.
     pub transactional_id: Option<String>,

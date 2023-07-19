@@ -14,7 +14,12 @@
 
 use std::{io, io::Cursor};
 
-use crate::{apikey::ApiMessageType, codec::*, request_header::RequestHeader};
+use bytes::BufMut;
+
+use crate::{
+    apikey::ApiMessageType, codec::*, request_header::RequestHeader,
+    response_header::ResponseHeader,
+};
 
 pub mod api_versions_request;
 pub mod api_versions_response;
@@ -36,7 +41,7 @@ pub enum Request {
 }
 
 impl Request {
-    pub fn decode<T: AsRef<[u8]>>(cursor: &mut Cursor<T>) -> io::Result<Self> {
+    pub fn decode<T: AsRef<[u8]>>(cursor: &mut Cursor<T>) -> io::Result<(RequestHeader, Request)> {
         let pos = cursor.position();
         let api_key = Int16.decode(cursor)?;
         let api_version = Int16.decode(cursor)?;
@@ -48,7 +53,7 @@ impl Request {
         let api_type = ApiMessageType::try_from(header.request_api_key)?;
         let api_version = header.request_api_version;
 
-        match api_type {
+        let request = match api_type {
             ApiMessageType::ApiVersions => {
                 api_versions_request::ApiVersionsRequest::decode(cursor, api_version)
                     .map(Request::ApiVersionsRequest)
@@ -66,6 +71,44 @@ impl Request {
                     .map(Request::MetadataRequest)
             }
             _ => unimplemented!("{}", api_type.api_key),
+        }?;
+
+        Ok((header, request))
+    }
+}
+
+#[derive(Debug)]
+pub enum Response {
+    ApiVersionsResponse(api_versions_response::ApiVersionsResponse),
+    CreateTopicsResponse(create_topic_response::CreateTopicsResponse),
+    InitProducerIdResponse(init_producer_id_response::InitProducerIdResponse),
+    MetadataResponse(metadata_response::MetadataResponse),
+}
+
+impl Response {
+    pub fn encode_alloc(&self, header: RequestHeader) -> io::Result<bytes::Bytes> {
+        let api_type = ApiMessageType::try_from(header.request_api_key)?;
+        let api_version = header.request_api_version;
+        let correlation_id = header.correlation_id;
+
+        let mut buf = vec![];
+        let response_header_version = api_type.response_header_version(api_version);
+        let response_header = ResponseHeader {
+            correlation_id,
+            unknown_tagged_fields: vec![],
+        };
+        response_header.encode(&mut buf, response_header_version)?;
+
+        match self {
+            Response::ApiVersionsResponse(resp) => resp.encode(&mut buf, api_version)?,
+            Response::CreateTopicsResponse(resp) => resp.encode(&mut buf, api_version)?,
+            Response::InitProducerIdResponse(resp) => resp.encode(&mut buf, api_version)?,
+            Response::MetadataResponse(resp) => resp.encode(&mut buf, api_version)?,
         }
+
+        let mut bs = bytes::BytesMut::new();
+        Int32.encode(&mut bs, buf.len() as i32)?;
+        bs.put_slice(buf.as_slice());
+        Ok(bs.freeze())
     }
 }

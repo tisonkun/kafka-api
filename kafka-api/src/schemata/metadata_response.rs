@@ -18,7 +18,7 @@ use bytes::BufMut;
 
 use crate::{codec::*, err_decode_message_null};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MetadataResponse {
     /// The duration in milliseconds for which the request was throttled due to a quota violation,
     /// or zero if the request did not violate any quota.
@@ -60,7 +60,7 @@ impl Encodable for MetadataResponse {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MetadataResponseBroker {
     /// The broker ID.
     pub node_id: i32,
@@ -89,7 +89,7 @@ impl Encodable for MetadataResponseBroker {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MetadataResponseTopic {
     /// The topic error, or 0 if there was no error.
     pub error_code: i16,
@@ -139,7 +139,7 @@ impl Encodable for MetadataResponseTopic {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MetadataResponsePartition {
     /// The partition error, or 0 if there was no error.
     pub error_code: i16,

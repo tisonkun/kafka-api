@@ -14,12 +14,14 @@
 
 use std::{
     io,
-    io::{Cursor, Read},
+    io::{Cursor, Read, Write},
     mem::size_of,
     net::{TcpListener, TcpStream},
+    sync::{Arc, Mutex},
 };
 
 use kafka_api::Request;
+use simplesrv::Broker;
 use tracing::{error, error_span, info, Level};
 
 fn main() -> io::Result<()> {
@@ -31,13 +33,15 @@ fn main() -> io::Result<()> {
     let listener = TcpListener::bind(addr)?;
     info!("Starting Kafka Simple Server at {}", addr);
 
+    let broker = Arc::new(Mutex::new(Broker {}));
     loop {
         let (socket, addr) = listener.accept()?;
+        let broker = broker.clone();
         std::thread::spawn(move || {
             let addr = addr.to_string();
             error_span!("connection", addr).in_scope(|| {
                 info!("Accept socket on {}", addr);
-                match dispatch(socket) {
+                match dispatch(socket, broker) {
                     Ok(()) => {
                         info!("connection closed");
                     }
@@ -53,7 +57,7 @@ fn main() -> io::Result<()> {
     }
 }
 
-fn dispatch(mut socket: TcpStream) -> io::Result<()> {
+fn dispatch(mut socket: TcpStream, broker: Arc<Mutex<Broker>>) -> io::Result<()> {
     loop {
         let n = {
             let mut buf = [0; size_of::<i32>()];
@@ -65,8 +69,16 @@ fn dispatch(mut socket: TcpStream) -> io::Result<()> {
             socket.read_exact(&mut buf)?;
             buf
         };
+
         let mut cursor = Cursor::new(buf.as_slice());
-        let request = Request::decode(&mut cursor)?;
+        let (header, request) = Request::decode(&mut cursor)?;
         info!("Receive request {request:?}");
+
+        let response = {
+            let mut broker = broker.lock().unwrap();
+            broker.reply(request)
+        };
+        let bs = response.encode_alloc(header)?;
+        socket.write_all(bs.as_ref())?;
     }
 }

@@ -18,7 +18,7 @@ use bytes::Buf;
 
 use crate::{codec::*, err_decode_message_null, err_decode_message_unsupported};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MetadataRequest {
     /// The topics to fetch metadata for.
     pub topics: Vec<MetadataRequestTopic>,
@@ -58,7 +58,7 @@ impl Decodable for MetadataRequest {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct MetadataRequestTopic {
     /// The topic id.
     pub topic_id: uuid::Uuid,

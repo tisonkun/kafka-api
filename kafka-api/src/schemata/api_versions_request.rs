@@ -18,7 +18,7 @@ use bytes::Buf;
 
 use crate::{codec::*, err_decode_message_null};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ApiVersionsRequest {
     /// The name of the client.
     pub client_software_name: String,

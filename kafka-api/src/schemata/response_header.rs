@@ -18,7 +18,7 @@ use bytes::BufMut;
 
 use crate::codec::*;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ResponseHeader {
     /// The correlation ID of this response.
     pub correlation_id: i32,

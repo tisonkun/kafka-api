@@ -18,7 +18,7 @@ use bytes::Buf;
 
 use crate::{codec::*, err_decode_message_null};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CreateTopicsRequest {
     /// The topics to create.
     pub topics: Vec<CreatableTopic>,
@@ -49,7 +49,7 @@ impl Decodable for CreateTopicsRequest {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CreatableTopic {
     /// The topic name.
     pub name: String,
@@ -90,7 +90,7 @@ impl Decodable for CreatableTopic {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CreatableTopicConfig {
     /// The configuration name.
     pub name: String,
@@ -116,7 +116,7 @@ impl Decodable for CreatableTopicConfig {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CreatableReplicaAssignment {
     /// The partition index.
     pub partition_index: i32,

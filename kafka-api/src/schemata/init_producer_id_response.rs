@@ -18,7 +18,7 @@ use bytes::BufMut;
 
 use crate::codec::*;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct InitProducerIdResponse {
     /// The duration in milliseconds for which the request was throttled due to a quota violation,
     /// or zero if the request did not violate any quota.

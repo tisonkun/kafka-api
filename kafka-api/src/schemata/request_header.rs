@@ -18,7 +18,7 @@ use bytes::Buf;
 
 use crate::codec::*;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RequestHeader {
     /// The API key of this request.
     pub request_api_key: i16,
