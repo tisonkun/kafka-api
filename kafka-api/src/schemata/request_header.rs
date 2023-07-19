@@ -34,7 +34,7 @@ pub struct RequestHeader {
 
 impl Decodable for RequestHeader {
     fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
-        let mut res = Self {
+        let mut res = RequestHeader {
             request_api_key: Int16.decode(buf)?,
             request_api_version: Int16.decode(buf)?,
             correlation_id: Int32.decode(buf)?,
