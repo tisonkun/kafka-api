@@ -14,7 +14,7 @@
 
 use std::io;
 
-use crate::err_decode_message;
+use crate::err_codec_message;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct ApiMessageType {
@@ -52,7 +52,7 @@ impl TryFrom<i16> for ApiMessageType {
             18 => Ok(ApiMessageType::ApiVersions),
             19 => Ok(ApiMessageType::CreateTopics),
             22 => Ok(ApiMessageType::InitProducerId),
-            _ => Err(err_decode_message(format!("unknown api key {api_key}"))),
+            _ => Err(err_codec_message(format!("unknown api key {api_key}"))),
         }
     }
 }

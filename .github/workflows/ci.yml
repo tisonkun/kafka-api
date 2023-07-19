@@ -41,7 +41,7 @@ jobs:
       - uses: korandoru/hawkeye@v3
       - uses: Swatinem/rust-cache@v2
       - name: Check Clippy
-        run: cargo clippy --tests --all-features -- -D warnings
+        run: cargo clippy --tests --all-features --all-targets --workspace -- -D warnings
       - name: Check format
         run: cargo fmt --all --check
 
@@ -51,7 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build
+      - run: cargo build --workspace --all-features --tests --examples --benches
       - name: Run tests
         run: cargo test --workspace -- --nocapture
 

@@ -30,13 +30,18 @@ where
     io::Error::new(io::ErrorKind::Other, error.into())
 }
 
-fn err_decode_message(message: String) -> io::Error {
+fn err_codec_message(message: String) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
-fn err_decode_message_non_null(field: impl Display) -> io::Error {
-    err_decode_message(format!(
-        "non-nullable field {} was serialized as null",
-        field
-    ))
+fn err_decode_message_unsupported(version: i16, schemata: &str) -> io::Error {
+    err_codec_message(format!("Cannot read version {version} of {schemata}"))
+}
+
+fn err_encode_message_unsupported(version: i16, schemata: &str) -> io::Error {
+    err_codec_message(format!("Cannot write version {version} of {schemata}"))
+}
+
+fn err_decode_message_null(field: impl Display) -> io::Error {
+    err_codec_message(format!("non-nullable field {field} was serialized as null"))
 }

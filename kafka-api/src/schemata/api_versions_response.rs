@@ -16,7 +16,7 @@ use std::io;
 
 use bytes::BufMut;
 
-use crate::codec::*;
+use crate::{codec::*, err_encode_message_unsupported};
 
 #[derive(Debug, Default)]
 pub struct ApiVersionsResponse {
@@ -121,10 +121,12 @@ pub struct SupportedFeatureKey {
 
 impl Encodable for SupportedFeatureKey {
     fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
-        assert!(
-            version >= 3,
-            "Can't write version {version} of SupportedFeatureKey"
-        );
+        if version > 3 {
+            Err(err_encode_message_unsupported(
+                version,
+                "SupportedFeatureKey",
+            ))?
+        }
         NullableString(true).encode(buf, self.name.as_ref())?;
         Int16.encode(buf, self.min_version)?;
         Int16.encode(buf, self.max_version)?;
@@ -147,10 +149,12 @@ pub struct FinalizedFeatureKey {
 
 impl Encodable for FinalizedFeatureKey {
     fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
-        assert!(
-            version >= 3,
-            "Can't write version {version} of FinalizedFeatureKey"
-        );
+        if version > 3 {
+            Err(err_encode_message_unsupported(
+                version,
+                "FinalizedFeatureKey",
+            ))?
+        }
         NullableString(true).encode(buf, self.name.as_ref())?;
         Int16.encode(buf, self.max_version_level)?;
         Int16.encode(buf, self.min_version_level)?;

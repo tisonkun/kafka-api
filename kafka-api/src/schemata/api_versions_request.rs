@@ -16,7 +16,7 @@ use std::io;
 
 use bytes::Buf;
 
-use crate::{codec::*, err_decode_message_non_null};
+use crate::{codec::*, err_decode_message_null};
 
 #[derive(Debug, Default)]
 pub struct ApiVersionsRequest {
@@ -30,16 +30,16 @@ pub struct ApiVersionsRequest {
 
 impl Decodable for ApiVersionsRequest {
     fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
-        let mut this = Self::default();
+        let mut this = ApiVersionsRequest::default();
         if version >= 3 {
             this.client_software_name = NullableString(true)
                 .decode(buf)?
-                .ok_or_else(|| err_decode_message_non_null("client_software_name"))?;
+                .ok_or_else(|| err_decode_message_null("client_software_name"))?;
         }
         if version >= 3 {
             this.client_software_version = NullableString(true)
                 .decode(buf)?
-                .ok_or_else(|| err_decode_message_non_null("client_software_version"))?;
+                .ok_or_else(|| err_decode_message_null("client_software_version"))?;
         }
         if version >= 3 {
             this.unknown_tagged_fields = RawTaggedFieldList.decode(buf)?;

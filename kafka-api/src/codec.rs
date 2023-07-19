@@ -16,7 +16,7 @@ use std::{io, mem::size_of};
 
 use bytes::{Buf, BufMut};
 
-use crate::{err_decode_message, err_io_other};
+use crate::{err_codec_message, err_io_other};
 
 pub trait Decoder<T: Sized> {
     fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<T>;
@@ -84,7 +84,7 @@ macro_rules! define_ints_codec {
                 if buf.remaining() >= size_of::<$ty>() {
                     Ok(buf.$get())
                 } else {
-                    Err(err_decode_message(format!(
+                    Err(err_codec_message(format!(
                         stringify!(no enough bytes when decode $ty (remaining: {})),
                         buf.remaining()
                     )))
@@ -104,7 +104,7 @@ macro_rules! define_ints_codec {
                     buf.$put(*value);
                     Ok(())
                 } else {
-                    Err(err_decode_message(format!(
+                    Err(err_codec_message(format!(
                         stringify!(no enough bytes when encode $ty (remaining: {})),
                         buf.remaining_mut()
                     )))
@@ -133,7 +133,7 @@ impl Decoder<bool> for Bool {
         if buf.remaining() >= size_of::<u8>() {
             Ok(buf.get_u8() != 0)
         } else {
-            Err(err_decode_message(format!(
+            Err(err_codec_message(format!(
                 "no enough bytes when decode boolean (remaining: {})",
                 buf.remaining()
             )))
@@ -147,7 +147,7 @@ impl Encoder<bool> for Bool {
             buf.put_u8(value as u8);
             Ok(())
         } else {
-            Err(err_decode_message(format!(
+            Err(err_codec_message(format!(
                 "no enough bytes when encode boolean (remaining: {})",
                 buf.remaining_mut()
             )))
@@ -170,7 +170,7 @@ impl Decoder<i32> for VarInt {
                     break;
                 }
             } else {
-                return Err(err_decode_message(format!(
+                return Err(err_codec_message(format!(
                     "no enough bytes when decode varint (res: {res}, remaining: {})",
                     buf.remaining()
                 )));
@@ -210,7 +210,7 @@ impl Decoder<Option<String>> for NullableString {
                 let str = String::from_utf8(bs.to_vec()).map_err(err_io_other)?;
                 Ok(Some(str))
             }
-            n => Err(err_decode_message(format!(
+            n => Err(err_codec_message(format!(
                 "illegal length {n} when decode string"
             ))),
         }
@@ -250,7 +250,7 @@ fn read_exact_bytes_of<B: Buf>(buf: &mut B, n: usize, ty: &str) -> io::Result<by
     if buf.remaining() >= n {
         Ok(buf.copy_to_bytes(n))
     } else {
-        Err(err_decode_message(format!(
+        Err(err_codec_message(format!(
             "no enough {n} bytes when decode {ty:?} (remaining: {})",
             buf.remaining()
         )))
@@ -277,7 +277,7 @@ impl<T, E: Decoder<T>> Decoder<Option<Vec<T>>> for NullableArray<E> {
                 }
                 Ok(Some(result))
             }
-            n => Err(err_decode_message(format!(
+            n => Err(err_codec_message(format!(
                 "illegal length {n} when decode array"
             ))),
         }
@@ -345,7 +345,7 @@ impl Encoder<uuid::Uuid> for Uuid {
             buf.put_slice(value.as_bytes());
             Ok(())
         } else {
-            Err(err_decode_message(format!(
+            Err(err_codec_message(format!(
                 "no enough bytes when encode uuid (remaining: {})",
                 buf.remaining_mut()
             )))
