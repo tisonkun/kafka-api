@@ -12,17 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
+#![feature(io_error_other)]
+
+use std::{error, fmt::Display, io};
+
+pub use codec::{Decodable, Encodable, RawTaggedField};
+
+pub(crate) mod codec;
+
+fn err_io_other<E>(error: E) -> io::Error
+where
+    E: Into<Box<dyn error::Error + Send + Sync>>,
+{
+    io::Error::new(io::ErrorKind::Other, error.into())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+fn err_decode_message(message: String) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message)
+}
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+fn err_decode_message_non_null(field: impl Display) -> io::Error {
+    err_decode_message(format!(
+        "non-nullable field {} was serialized as null",
+        field
+    ))
 }
