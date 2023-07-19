@@ -22,6 +22,7 @@ pub use schemata::*;
 pub mod apikey;
 pub(crate) mod codec;
 mod schemata;
+pub mod util;
 
 fn err_io_other<E>(error: E) -> io::Error
 where

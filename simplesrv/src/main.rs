@@ -14,9 +14,15 @@
 
 use std::{
     io,
+    io::{Cursor, Read},
+    mem::size_of,
     net::{TcpListener, TcpStream},
 };
 
+use kafka_api::{
+    api_versions_request::ApiVersionsRequest, apikey::ApiMessageType, util::read_request_header,
+    Decodable,
+};
 use tracing::{error, error_span, info, Level};
 
 fn main() -> io::Result<()> {
@@ -47,6 +53,28 @@ fn main() -> io::Result<()> {
     }
 }
 
-fn dispatch(_socket: TcpStream) -> io::Result<()> {
-    Ok(())
+fn dispatch(mut socket: TcpStream) -> io::Result<()> {
+    loop {
+        let n = {
+            let mut buf = [0; size_of::<i32>()];
+            socket.read_exact(&mut buf)?;
+            i32::from_be_bytes(buf) as usize
+        };
+        let buf = {
+            let mut buf = vec![0u8; n];
+            socket.read_exact(&mut buf)?;
+            buf
+        };
+        let mut cursor = Cursor::new(buf.as_slice());
+        let request_header = read_request_header(&mut cursor)?;
+        let api_type = ApiMessageType::try_from(request_header.request_api_key)?;
+        let api_version = request_header.request_api_version;
+        match api_type {
+            ApiMessageType::ApiVersions => {
+                let request = ApiVersionsRequest::decode(&mut cursor, api_version)?;
+                info!("Receive request {request:?}");
+            }
+            _ => unimplemented!("{}", api_type.api_key),
+        }
+    }
 }
