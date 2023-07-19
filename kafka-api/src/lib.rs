@@ -17,9 +17,11 @@
 use std::{error, fmt::Display, io};
 
 pub use codec::{Decodable, Encodable, RawTaggedField};
+pub use schemata::*;
 
 pub mod apikey;
 pub(crate) mod codec;
+mod schemata;
 
 fn err_io_other<E>(error: E) -> io::Error
 where
