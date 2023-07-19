@@ -14,6 +14,8 @@
 
 pub mod api_versions_request;
 pub mod api_versions_response;
+pub mod create_topic_request;
+pub mod create_topic_response;
 pub mod init_producer_id_request;
 pub mod init_producer_id_response;
 pub mod metadata_request;
