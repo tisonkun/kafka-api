@@ -16,12 +16,12 @@ use std::{
     io,
     io::{Cursor, Read, Write},
     mem::size_of,
-    net::{TcpListener, TcpStream},
+    net::{SocketAddr, TcpListener, TcpStream},
     sync::{Arc, Mutex},
 };
 
 use kafka_api::Request;
-use simplesrv::Broker;
+use simplesrv::{Broker, BrokerMeta, ClusterMeta};
 use tracing::{error, error_span, info, Level};
 
 fn main() -> io::Result<()> {
@@ -29,11 +29,22 @@ fn main() -> io::Result<()> {
         .with_max_level(Level::TRACE)
         .init();
 
-    let addr = "127.0.0.1:9092";
+    let addr: SocketAddr = "127.0.0.1:9092".parse().unwrap();
     let listener = TcpListener::bind(addr)?;
     info!("Starting Kafka Simple Server at {}", addr);
 
-    let broker = Arc::new(Mutex::new(Broker {}));
+    let broker_meta = BrokerMeta {
+        node_id: 1,
+        host: addr.ip().to_string(),
+        port: addr.port() as i32,
+    };
+    let cluster_meta = ClusterMeta {
+        cluster_id: "Kafka Simple Server".to_string(),
+        controller_id: 1,
+        brokers: vec![broker_meta.clone()],
+    };
+    let broker = Arc::new(Mutex::new(Broker::new(broker_meta, cluster_meta)));
+
     loop {
         let (socket, addr) = listener.accept()?;
         let broker = broker.clone();

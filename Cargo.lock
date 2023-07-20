@@ -113,6 +113,7 @@ dependencies = [
  "kafka-api",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
