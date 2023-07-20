@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{cmp::max, collections::BTreeMap};
+use std::{
+    cmp::max,
+    collections::BTreeMap,
+    sync::atomic::{AtomicI64, Ordering},
+};
 
 use kafka_api::{
     api_versions_request::ApiVersionsRequest,
@@ -20,13 +24,17 @@ use kafka_api::{
     apikey::ApiMessageType,
     create_topic_request::CreateTopicsRequest,
     create_topic_response::{CreatableTopicResult, CreateTopicsResponse},
+    init_producer_id_request::InitProducerIdRequest,
+    init_producer_id_response::InitProducerIdResponse,
     metadata_request::MetadataRequest,
     metadata_response::{
         MetadataResponse, MetadataResponseBroker, MetadataResponsePartition, MetadataResponseTopic,
     },
+    produce_request::ProduceRequest,
+    produce_response::{PartitionProduceResponse, ProduceResponse, TopicProduceResponse},
     Request, Response,
 };
-use tracing::trace;
+use tracing::{debug, trace};
 
 #[derive(Debug, Clone)]
 pub struct ClusterMeta {
@@ -52,10 +60,13 @@ struct TopicMeta {
 #[derive(Debug, Clone)]
 struct PartitionMeta {}
 
+#[derive(Debug)]
 pub struct Broker {
     broker_meta: BrokerMeta, // this
     cluster_meta: ClusterMeta,
     topics: BTreeMap<String, TopicMeta>,
+    producers: AtomicI64,
+    topic_partition_store: BTreeMap<(uuid::Uuid, i32), Vec<bytes::Bytes>>,
 }
 
 impl Broker {
@@ -64,6 +75,8 @@ impl Broker {
             broker_meta,
             cluster_meta,
             topics: BTreeMap::new(),
+            producers: AtomicI64::new(1),
+            topic_partition_store: BTreeMap::new(),
         }
     }
 
@@ -78,10 +91,15 @@ impl Broker {
             Request::MetadataRequest(request) => {
                 Response::MetadataResponse(self.receive_metadata_request(request))
             }
-            _ => unimplemented!("{:?}", request),
-            // Request::InitProducerIdRequest(_) => {}
+            Request::InitProducerIdRequest(request) => {
+                Response::InitProducerIdResponse(self.receive_init_producer(request))
+            }
+            Request::ProduceRequest(request) => {
+                Response::ProduceResponse(self.receive_produce(request))
+            }
         };
-        trace!("Reply {response:?}");
+        trace!("Broker state: {self:?}");
+        debug!("Reply {response:?}");
         response
     }
 
@@ -163,11 +181,13 @@ impl Broker {
             let topic_name = topic.name.clone();
             let num_partitions = max(topic.num_partitions, 1);
 
-            let partitions = (0..num_partitions)
-                .map(|idx| (idx, PartitionMeta {}))
-                .collect();
+            let mut partitions = BTreeMap::new();
+            for idx in 0..num_partitions {
+                partitions.insert(idx, PartitionMeta {});
+                self.topic_partition_store.insert((topic_id, idx), vec![]);
+            }
 
-            // TODO - handle topic already exist
+            // TODO - return error on topic already exist
             self.topics.insert(
                 topic_name.clone(),
                 TopicMeta {
@@ -190,6 +210,49 @@ impl Broker {
             ..Default::default()
         }
     }
+
+    fn receive_init_producer(&mut self, _request: InitProducerIdRequest) -> InitProducerIdResponse {
+        InitProducerIdResponse {
+            producer_id: self.producers.fetch_add(1, Ordering::SeqCst),
+            producer_epoch: 0,
+            ..Default::default()
+        }
+    }
+
+    fn receive_produce(&mut self, request: ProduceRequest) -> ProduceResponse {
+        let mut responses = vec![];
+        for topic in request.topic_data {
+            let topic_name = topic.name.clone();
+            // TODO - return error on topic not exist
+            let topic_meta = self.topics.get(&topic_name).unwrap();
+            let mut partition_responses = vec![];
+            for partition in topic.partition_data {
+                let idx = partition.index;
+                if let Some(record) = partition.records {
+                    // TODO - return error on topic partition not exist
+                    let store = self
+                        .topic_partition_store
+                        .get_mut(&(topic_meta.topic_id, idx))
+                        .unwrap();
+                    store.push(record);
+                }
+                partition_responses.push(PartitionProduceResponse {
+                    index: idx,
+                    ..Default::default()
+                });
+            }
+            responses.push(TopicProduceResponse {
+                name: topic_name,
+                partition_responses,
+                ..Default::default()
+            });
+        }
+
+        ProduceResponse {
+            responses,
+            ..Default::default()
+        }
+    }
 }
 
 const fn supported_apis() -> &'static [ApiMessageType] {
@@ -198,5 +261,6 @@ const fn supported_apis() -> &'static [ApiMessageType] {
         ApiMessageType::CreateTopics,
         ApiMessageType::InitProducerId,
         ApiMessageType::Metadata,
+        ApiMessageType::Produce,
     ]
 }

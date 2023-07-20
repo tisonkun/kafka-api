@@ -110,6 +110,7 @@ dependencies = [
 name = "simplesrv"
 version = "0.2.0"
 dependencies = [
+ "bytes",
  "kafka-api",
  "tracing",
  "tracing-subscriber",

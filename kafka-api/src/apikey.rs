@@ -25,6 +25,7 @@ pub struct ApiMessageType {
 
 #[allow(non_upper_case_globals)]
 impl ApiMessageType {
+    pub const Produce: Self = ApiMessageType::new(0, 0, 9);
     pub const Metadata: Self = ApiMessageType::new(3, 0, 12);
     pub const ApiVersions: Self = ApiMessageType::new(18, 0, 3);
     pub const CreateTopics: Self = ApiMessageType::new(19, 0, 7);
@@ -48,6 +49,7 @@ impl TryFrom<i16> for ApiMessageType {
 
     fn try_from(api_key: i16) -> Result<Self, Self::Error> {
         match api_key {
+            0 => Ok(ApiMessageType::Produce),
             3 => Ok(ApiMessageType::Metadata),
             18 => Ok(ApiMessageType::ApiVersions),
             19 => Ok(ApiMessageType::CreateTopics),
@@ -68,6 +70,7 @@ impl ApiMessageType {
             }
         }
         match *self {
+            ApiMessageType::Produce => resolve_request_header_version(api_version >= 9),
             ApiMessageType::Metadata => resolve_request_header_version(api_version >= 9),
             ApiMessageType::ApiVersions => resolve_request_header_version(api_version >= 3),
             ApiMessageType::CreateTopics => resolve_request_header_version(api_version >= 5),
@@ -87,6 +90,7 @@ impl ApiMessageType {
         }
 
         match *self {
+            ApiMessageType::Produce => resolve_response_header_version(api_version >= 9),
             ApiMessageType::Metadata => resolve_response_header_version(api_version >= 9),
             // ApiVersionsResponse always includes a v0 header. See KIP-511 for details.
             ApiMessageType::ApiVersions => 0,

@@ -21,6 +21,11 @@ use crate::{
     response_header::ResponseHeader,
 };
 
+// Upstream baseline commits
+// -------------------------
+// Generator https://github.com/apache/kafka/commit/c08120f83f7318f15dcf14d525876d18caf6afd0
+// Message   https://github.com/apache/kafka/commit/443bd1dd82d45f1169b3d5ff83d62c4e9220511c
+
 pub mod api_versions_request;
 pub mod api_versions_response;
 pub mod create_topic_request;
@@ -29,6 +34,8 @@ pub mod init_producer_id_request;
 pub mod init_producer_id_response;
 pub mod metadata_request;
 pub mod metadata_response;
+pub mod produce_request;
+pub mod produce_response;
 pub mod request_header;
 pub mod response_header;
 
@@ -38,6 +45,7 @@ pub enum Request {
     CreateTopicRequest(create_topic_request::CreateTopicsRequest),
     InitProducerIdRequest(init_producer_id_request::InitProducerIdRequest),
     MetadataRequest(metadata_request::MetadataRequest),
+    ProduceRequest(produce_request::ProduceRequest),
 }
 
 impl Request {
@@ -70,6 +78,8 @@ impl Request {
                 metadata_request::MetadataRequest::decode(cursor, api_version)
                     .map(Request::MetadataRequest)
             }
+            ApiMessageType::Produce => produce_request::ProduceRequest::decode(cursor, api_version)
+                .map(Request::ProduceRequest),
             _ => unimplemented!("{}", api_type.api_key),
         }?;
 
@@ -83,6 +93,7 @@ pub enum Response {
     CreateTopicsResponse(create_topic_response::CreateTopicsResponse),
     InitProducerIdResponse(init_producer_id_response::InitProducerIdResponse),
     MetadataResponse(metadata_response::MetadataResponse),
+    ProduceResponse(produce_response::ProduceResponse),
 }
 
 impl Response {
@@ -104,6 +115,7 @@ impl Response {
             Response::CreateTopicsResponse(resp) => resp.encode(&mut buf, api_version)?,
             Response::InitProducerIdResponse(resp) => resp.encode(&mut buf, api_version)?,
             Response::MetadataResponse(resp) => resp.encode(&mut buf, api_version)?,
+            Response::ProduceResponse(resp) => resp.encode(&mut buf, api_version)?,
         }
 
         let mut bs = bytes::BytesMut::new();

@@ -22,7 +22,7 @@ use std::{
 
 use kafka_api::Request;
 use simplesrv::{Broker, BrokerMeta, ClusterMeta};
-use tracing::{error, error_span, info, Level};
+use tracing::{debug, error, error_span, info, Level};
 
 fn main() -> io::Result<()> {
     tracing_subscriber::fmt()
@@ -83,7 +83,7 @@ fn dispatch(mut socket: TcpStream, broker: Arc<Mutex<Broker>>) -> io::Result<()>
 
         let mut cursor = Cursor::new(buf.as_slice());
         let (header, request) = Request::decode(&mut cursor)?;
-        info!("Receive request {request:?}");
+        debug!("Receive request {request:?}");
 
         let response = {
             let mut broker = broker.lock().unwrap();

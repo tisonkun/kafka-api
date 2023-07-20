@@ -246,6 +246,59 @@ impl Encoder<&str> for NullableString {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub(super) struct NullableBytes(pub bool /* flexible */);
+
+impl Decoder<Option<bytes::Bytes>> for NullableBytes {
+    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<Option<bytes::Bytes>> {
+        let len = if self.0 {
+            VarInt.decode(buf)? - 1
+        } else {
+            Int16.decode(buf)? as i32
+        };
+        match len {
+            -1 => Ok(None),
+            n if n >= 0 => {
+                let n = n as usize;
+                let bs = read_exact_bytes_of(buf, n, "bytes")?;
+                Ok(Some(bs))
+            }
+            n => Err(err_codec_message(format!(
+                "illegal length {n} when decode bytes"
+            ))),
+        }
+    }
+}
+
+impl Encoder<Option<&bytes::Bytes>> for NullableBytes {
+    fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&bytes::Bytes>) -> io::Result<()> {
+        match value {
+            None => {
+                if self.0 {
+                    VarInt.encode(buf, 0)
+                } else {
+                    Int32.encode(buf, -1)
+                }
+            }
+            Some(s) => self.encode(buf, s),
+        }
+    }
+}
+
+impl Encoder<&bytes::Bytes> for NullableBytes {
+    fn encode<B: BufMut>(&self, buf: &mut B, value: &bytes::Bytes) -> io::Result<()> {
+        let bs = value.as_ref();
+        let len = bs.len() as i16;
+        if self.0 {
+            VarInt.encode(buf, len as i32 + 1)?;
+        } else {
+            Int16.encode(buf, len)?;
+        }
+        buf.put_slice(bs);
+        Ok(())
+    }
+}
+
 fn read_exact_bytes_of<B: Buf>(buf: &mut B, n: usize, ty: &str) -> io::Result<bytes::Bytes> {
     if buf.remaining() >= n {
         Ok(buf.copy_to_bytes(n))
