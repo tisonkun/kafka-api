@@ -20,6 +20,8 @@ version.workspace = true
 license.workspace = true
 publish = false
 
+description = "Simple Kafka server to demostrate APIs usage."
+
 [dependencies]
 kafka-api = { path = "../kafka-api" }
 
