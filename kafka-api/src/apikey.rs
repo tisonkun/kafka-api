@@ -27,6 +27,9 @@ pub struct ApiMessageType {
 impl ApiMessageType {
     pub const Produce: Self = ApiMessageType::new(0, 0, 9);
     pub const Metadata: Self = ApiMessageType::new(3, 0, 12);
+    pub const FindCoordinator: Self = ApiMessageType::new(10, 0, 4);
+    pub const JoinGroup: Self = ApiMessageType::new(11, 0, 9);
+    pub const SyncGroup: Self = ApiMessageType::new(14, 0, 5);
     pub const ApiVersions: Self = ApiMessageType::new(18, 0, 3);
     pub const CreateTopics: Self = ApiMessageType::new(19, 0, 7);
     pub const InitProducerId: Self = ApiMessageType::new(22, 0, 4);
@@ -51,6 +54,9 @@ impl TryFrom<i16> for ApiMessageType {
         match api_key {
             0 => Ok(ApiMessageType::Produce),
             3 => Ok(ApiMessageType::Metadata),
+            10 => Ok(ApiMessageType::FindCoordinator),
+            11 => Ok(ApiMessageType::JoinGroup),
+            14 => Ok(ApiMessageType::SyncGroup),
             18 => Ok(ApiMessageType::ApiVersions),
             19 => Ok(ApiMessageType::CreateTopics),
             22 => Ok(ApiMessageType::InitProducerId),
@@ -72,6 +78,9 @@ impl ApiMessageType {
         match *self {
             ApiMessageType::Produce => resolve_request_header_version(api_version >= 9),
             ApiMessageType::Metadata => resolve_request_header_version(api_version >= 9),
+            ApiMessageType::FindCoordinator => resolve_request_header_version(api_version >= 3),
+            ApiMessageType::JoinGroup => resolve_request_header_version(api_version >= 6),
+            ApiMessageType::SyncGroup => resolve_request_header_version(api_version >= 4),
             ApiMessageType::ApiVersions => resolve_request_header_version(api_version >= 3),
             ApiMessageType::CreateTopics => resolve_request_header_version(api_version >= 5),
             ApiMessageType::InitProducerId => resolve_request_header_version(api_version >= 2),
@@ -92,6 +101,9 @@ impl ApiMessageType {
         match *self {
             ApiMessageType::Produce => resolve_response_header_version(api_version >= 9),
             ApiMessageType::Metadata => resolve_response_header_version(api_version >= 9),
+            ApiMessageType::FindCoordinator => resolve_response_header_version(api_version >= 3),
+            ApiMessageType::JoinGroup => resolve_response_header_version(api_version >= 6),
+            ApiMessageType::SyncGroup => resolve_response_header_version(api_version >= 4),
             // ApiVersionsResponse always includes a v0 header. See KIP-511 for details.
             ApiMessageType::ApiVersions => 0,
             ApiMessageType::CreateTopics => resolve_response_header_version(api_version >= 5),

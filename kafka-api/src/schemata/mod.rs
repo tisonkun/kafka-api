@@ -30,22 +30,31 @@ pub mod api_versions_request;
 pub mod api_versions_response;
 pub mod create_topic_request;
 pub mod create_topic_response;
+pub mod find_coordinator_request;
+pub mod find_coordinator_response;
 pub mod init_producer_id_request;
 pub mod init_producer_id_response;
+pub mod join_group_request;
+pub mod join_group_response;
 pub mod metadata_request;
 pub mod metadata_response;
 pub mod produce_request;
 pub mod produce_response;
 pub mod request_header;
 pub mod response_header;
+pub mod sync_group_request;
+pub mod sync_group_response;
 
 #[derive(Debug)]
 pub enum Request {
     ApiVersionsRequest(api_versions_request::ApiVersionsRequest),
     CreateTopicRequest(create_topic_request::CreateTopicsRequest),
+    FindCoordinatorRequest(find_coordinator_request::FindCoordinatorRequest),
     InitProducerIdRequest(init_producer_id_request::InitProducerIdRequest),
+    JoinGroupRequest(join_group_request::JoinGroupRequest),
     MetadataRequest(metadata_request::MetadataRequest),
     ProduceRequest(produce_request::ProduceRequest),
+    SyncGroupRequest(sync_group_request::SyncGroupRequest),
 }
 
 impl Request {
@@ -70,9 +79,17 @@ impl Request {
                 create_topic_request::CreateTopicsRequest::decode(cursor, api_version)
                     .map(Request::CreateTopicRequest)
             }
+            ApiMessageType::FindCoordinator => {
+                find_coordinator_request::FindCoordinatorRequest::decode(cursor, api_version)
+                    .map(Request::FindCoordinatorRequest)
+            }
             ApiMessageType::InitProducerId => {
                 init_producer_id_request::InitProducerIdRequest::decode(cursor, api_version)
                     .map(Request::InitProducerIdRequest)
+            }
+            ApiMessageType::JoinGroup => {
+                join_group_request::JoinGroupRequest::decode(cursor, api_version)
+                    .map(Request::JoinGroupRequest)
             }
             ApiMessageType::Metadata => {
                 metadata_request::MetadataRequest::decode(cursor, api_version)
@@ -80,6 +97,10 @@ impl Request {
             }
             ApiMessageType::Produce => produce_request::ProduceRequest::decode(cursor, api_version)
                 .map(Request::ProduceRequest),
+            ApiMessageType::SyncGroup => {
+                sync_group_request::SyncGroupRequest::decode(cursor, api_version)
+                    .map(Request::SyncGroupRequest)
+            }
             _ => unimplemented!("{}", api_type.api_key),
         }?;
 
@@ -91,9 +112,12 @@ impl Request {
 pub enum Response {
     ApiVersionsResponse(api_versions_response::ApiVersionsResponse),
     CreateTopicsResponse(create_topic_response::CreateTopicsResponse),
+    FindCoordinatorResponse(find_coordinator_response::FindCoordinatorResponse),
     InitProducerIdResponse(init_producer_id_response::InitProducerIdResponse),
+    JoinGroupResponse(join_group_response::JoinGroupResponse),
     MetadataResponse(metadata_response::MetadataResponse),
     ProduceResponse(produce_response::ProduceResponse),
+    SyncGroupResponse(sync_group_response::SyncGroupResponse),
 }
 
 impl Response {
@@ -113,9 +137,12 @@ impl Response {
         match self {
             Response::ApiVersionsResponse(resp) => resp.encode(&mut buf, api_version)?,
             Response::CreateTopicsResponse(resp) => resp.encode(&mut buf, api_version)?,
+            Response::FindCoordinatorResponse(resp) => resp.encode(&mut buf, api_version)?,
             Response::InitProducerIdResponse(resp) => resp.encode(&mut buf, api_version)?,
+            Response::JoinGroupResponse(resp) => resp.encode(&mut buf, api_version)?,
             Response::MetadataResponse(resp) => resp.encode(&mut buf, api_version)?,
             Response::ProduceResponse(resp) => resp.encode(&mut buf, api_version)?,
+            Response::SyncGroupResponse(resp) => resp.encode(&mut buf, api_version)?,
         }
 
         let mut bs = bytes::BytesMut::new();

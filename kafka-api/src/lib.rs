@@ -14,18 +14,19 @@
 
 #![feature(io_error_other)]
 
-use std::{error, fmt::Display, io};
+use std::{fmt::Display, io};
 
 pub use codec::{Decodable, Encodable, RawTaggedField};
 pub use schemata::*;
 
 pub mod apikey;
 pub(crate) mod codec;
+pub mod error;
 mod schemata;
 
 fn err_io_other<E>(error: E) -> io::Error
 where
-    E: Into<Box<dyn error::Error + Send + Sync>>,
+    E: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
     io::Error::new(io::ErrorKind::Other, error.into())
 }
@@ -44,4 +45,10 @@ fn err_encode_message_unsupported(version: i16, schemata: &str) -> io::Error {
 
 fn err_decode_message_null(field: impl Display) -> io::Error {
     err_codec_message(format!("non-nullable field {field} was serialized as null"))
+}
+
+fn err_encode_message_null(field: impl Display) -> io::Error {
+    err_codec_message(format!(
+        "non-nullable field {field} to be serialized as null"
+    ))
 }

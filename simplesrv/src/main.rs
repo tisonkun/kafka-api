@@ -21,7 +21,7 @@ use std::{
 };
 
 use kafka_api::Request;
-use simplesrv::{Broker, BrokerMeta, ClusterMeta};
+use simplesrv::{Broker, BrokerMeta, ClientInfo, ClusterMeta};
 use tracing::{debug, error, error_span, info, Level};
 
 fn main() -> io::Result<()> {
@@ -69,6 +69,8 @@ fn main() -> io::Result<()> {
 }
 
 fn dispatch(mut socket: TcpStream, broker: Arc<Mutex<Broker>>) -> io::Result<()> {
+    let client_host = socket.peer_addr()?;
+
     loop {
         let n = {
             let mut buf = [0; size_of::<i32>()];
@@ -86,8 +88,12 @@ fn dispatch(mut socket: TcpStream, broker: Arc<Mutex<Broker>>) -> io::Result<()>
         debug!("Receive request {request:?}");
 
         let response = {
+            let client_info = ClientInfo {
+                client_id: header.client_id.clone(),
+                client_host: client_host.to_string(),
+            };
             let mut broker = broker.lock().unwrap();
-            broker.reply(request)
+            broker.reply(client_info, request)
         };
         let bs = response.encode_alloc(header)?;
         socket.write_all(bs.as_ref())?;
