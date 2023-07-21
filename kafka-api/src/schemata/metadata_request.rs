@@ -35,16 +35,18 @@ pub struct MetadataRequest {
 
 impl Decodable for MetadataRequest {
     fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
-        let mut this = MetadataRequest::default();
+        let mut this = MetadataRequest {
+            topics: NullableArray(Struct(version), version >= 9)
+                .decode(buf)?
+                .or_else(|| if version >= 1 { Some(vec![]) } else { None })
+                .ok_or_else(|| err_decode_message_null("topics"))?,
+            ..Default::default()
+        };
         if version >= 4 {
             this.allow_auto_topic_creation = Bool.decode(buf)?;
         } else {
             this.allow_auto_topic_creation = true;
         };
-        this.topics = NullableArray(Struct(version), version >= 9)
-            .decode(buf)?
-            .or_else(|| if version >= 1 { Some(vec![]) } else { None })
-            .ok_or_else(|| err_decode_message_null("topics"))?;
         if (8..=10).contains(&version) {
             this.include_cluster_authorized_operations = Bool.decode(buf)?;
         }

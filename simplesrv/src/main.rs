@@ -20,6 +20,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use bytes::Buf;
 use kafka_api::Request;
 use simplesrv::{Broker, BrokerMeta, ClientInfo, ClusterMeta};
 use tracing::{debug, error, error_span, info, Level};
@@ -85,6 +86,7 @@ fn dispatch(mut socket: TcpStream, broker: Arc<Mutex<Broker>>) -> io::Result<()>
 
         let mut cursor = Cursor::new(buf.as_slice());
         let (header, request) = Request::decode(&mut cursor)?;
+        assert!(!cursor.has_remaining(), "remaining bytes unparsed");
         debug!("Receive request {request:?}");
 
         let response = {
