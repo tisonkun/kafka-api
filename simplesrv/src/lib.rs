@@ -425,7 +425,7 @@ impl Broker {
                     // Only try to create the group the member_id is empty - if member_id is
                     // specified but group does not exist, the request would be rejected.
                     return JoinGroupResponse {
-                        error_code: Error::UnknownMemberId.code(),
+                        error_code: Error::UNKNOWN_MEMBER_ID.code(),
                         member_id: request.member_id,
                         ..Default::default()
                     };
