@@ -18,6 +18,8 @@ use bytes::BufMut;
 
 use crate::codec::*;
 
+// Version 1 is the first flexible version.
+
 #[derive(Debug, Default, Clone)]
 pub struct ResponseHeader {
     /// The correlation ID of this response.

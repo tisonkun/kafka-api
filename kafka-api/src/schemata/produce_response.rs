@@ -18,6 +18,22 @@ use bytes::BufMut;
 
 use crate::{codec::*, err_encode_message_unsupported};
 
+// Version 1 added the throttle time.
+//
+// Version 2 added the log append time.
+//
+// Version 3 is the same as version 2.
+//
+// Version 4 added KAFKA_STORAGE_ERROR as a possible error code.
+//
+// Version 5 added LogStartOffset to filter out spurious
+// OutOfOrderSequenceExceptions on the client.
+//
+// Version 8 added RecordErrors and ErrorMessage to include information about
+// records that cause the whole batch to be dropped.  See KIP-467 for details.
+//
+// Version 9 enables flexible versions.
+
 #[derive(Debug, Default, Clone)]
 pub struct ProduceResponse {
     /// Each produce response

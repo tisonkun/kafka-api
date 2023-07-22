@@ -18,6 +18,19 @@ use bytes::Buf;
 
 use crate::{codec::*, err_decode_message_null};
 
+// Version 1 adds validateOnly.
+//
+// Version 4 makes partitions/replicationFactor optional even when assignments are not present
+// (KIP-464)
+//
+// Version 5 is the first flexible version.
+// Version 5 also returns topic configs in the response (KIP-525).
+//
+// Version 6 is identical to version 5 but may return a THROTTLING_QUOTA_EXCEEDED error
+// in the response if the topics creation is throttled (KIP-599).
+//
+// Version 7 is the same as version 6.
+
 #[derive(Debug, Default, Clone)]
 pub struct CreateTopicsRequest {
     /// The topics to create.

@@ -18,6 +18,23 @@ use bytes::BufMut;
 
 use crate::{codec::*, err_encode_message_unsupported};
 
+// Version 1 adds a per-topic error message string.
+//
+// Version 2 adds the throttle time.
+//
+// Starting in version 3, on quota violation, brokers send out responses before throttling.
+//
+// Version 4 makes partitions/replicationFactor optional even when assignments are not present
+// (KIP-464).
+//
+// Version 5 is the first flexible version.
+// Version 5 also returns topic configs in the response (KIP-525).
+//
+// Version 6 is identical to version 5 but may return a THROTTLING_QUOTA_EXCEEDED error
+// in the response if the topics creation is throttled (KIP-599).
+//
+// Version 7 returns the topic ID of the newly created topic if creation is successful.
+
 #[derive(Debug, Default, Clone)]
 pub struct CreateTopicsResponse {
     /// The duration in milliseconds for which the request was throttled due to a quota violation,

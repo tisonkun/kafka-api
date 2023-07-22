@@ -18,6 +18,22 @@ use bytes::Buf;
 
 use crate::{codec::*, err_decode_message_null, err_decode_message_unsupported};
 
+// Version 1 and 2 are the same as version 0.
+//
+// Version 3 adds the transactional ID, which is used for authorization when attempting to write
+// transactional data.  Version 3 also adds support for Kafka Message Format v2.
+//
+// Version 4 is the same as version 3, but the requester must be prepared to handle a
+// KAFKA_STORAGE_ERROR.
+//
+// Version 5 and 6 are the same as version 3.
+//
+// Starting in version 7, records can be produced using ZStandard compression.  See KIP-110.
+//
+// Starting in Version 8, response has RecordErrors and ErrorMessage. See KIP-467.
+//
+// Version 9 enables flexible versions.
+
 #[derive(Debug, Default, Clone)]
 pub struct ProduceRequest {
     /// The transactional ID, or null if the producer is not transactional.

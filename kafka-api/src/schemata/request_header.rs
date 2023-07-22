@@ -18,6 +18,12 @@ use bytes::Buf;
 
 use crate::codec::*;
 
+// Version 0 of the RequestHeader is only used by v0 of ControlledShutdownRequest.
+//
+// Version 1 is the first version with ClientId.
+//
+// Version 2 is the first flexible version.
+
 #[derive(Debug, Default, Clone)]
 pub struct RequestHeader {
     /// The API key of this request.

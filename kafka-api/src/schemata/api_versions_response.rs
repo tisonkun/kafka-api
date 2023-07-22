@@ -18,6 +18,17 @@ use bytes::BufMut;
 
 use crate::{codec::*, err_encode_message_unsupported};
 
+// Version 1 adds throttle time to the response.
+//
+// Starting in version 2, on quota violation, brokers send out responses before throttling.
+//
+// Version 3 is the first flexible version. Tagged fields are only supported in the body but
+// not in the header. The length of the header must not change in order to guarantee the
+// backward compatibility.
+//
+// Starting from Apache Kafka 2.4 (KIP-511), ApiKeys field is populated with the supported
+// versions of the ApiVersionsRequest when an UNSUPPORTED_VERSION error is returned.
+
 #[derive(Debug, Default, Clone)]
 pub struct ApiVersionsResponse {
     /// The top-level error code.

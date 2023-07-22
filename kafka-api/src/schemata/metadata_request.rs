@@ -18,6 +18,27 @@ use bytes::Buf;
 
 use crate::{codec::*, err_decode_message_null, err_decode_message_unsupported};
 
+// In version 0, an empty array indicates "request metadata for all topics."  In version 1 and
+// higher, an empty array indicates "request metadata for no topics," and a null array is used to
+// indicate "request metadata for all topics."
+//
+// Version 2 and 3 are the same as version 1.
+//
+// Version 4 adds AllowAutoTopicCreation.
+//
+// Starting in version 8, authorized operations can be requested for cluster and topic resource.
+//
+// Version 9 is the first flexible version.
+//
+// Version 10 adds topicId and allows name field to be null. However, this functionality was not
+// implemented on the server. Versions 10 and 11 should not use the topicId field or set topic name
+// to null.
+//
+// Version 11 deprecates IncludeClusterAuthorizedOperations field. This is now exposed
+// by the DescribeCluster API (KIP-700).
+//
+// Version 12 supports topic Id.
+
 #[derive(Debug, Default, Clone)]
 pub struct MetadataRequest {
     /// The topics to fetch metadata for.

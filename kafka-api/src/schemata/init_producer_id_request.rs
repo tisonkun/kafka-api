@@ -18,6 +18,15 @@ use bytes::Buf;
 
 use crate::codec::*;
 
+// Version 1 is the same as version 0.
+//
+// Version 2 is the first flexible version.
+//
+// Version 3 adds ProducerId and ProducerEpoch, allowing producers to try to resume after an
+// INVALID_PRODUCER_EPOCH error
+//
+// Version 4 adds the support for new error code PRODUCER_FENCED.
+
 #[derive(Debug, Default, Clone)]
 pub struct InitProducerIdRequest {
     /// The transactional id, or null if the producer is not transactional.

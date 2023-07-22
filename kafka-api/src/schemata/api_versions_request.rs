@@ -18,6 +18,10 @@ use bytes::Buf;
 
 use crate::{codec::*, err_decode_message_null};
 
+// Versions 0 through 2 of ApiVersionsRequest are the same.
+//
+// Version 3 is the first flexible version and adds ClientSoftwareName and ClientSoftwareVersion.
+
 #[derive(Debug, Default, Clone)]
 pub struct ApiVersionsRequest {
     /// The name of the client.

@@ -24,7 +24,7 @@ use crate::{
 // Upstream baseline commits
 // -------------------------
 // Generator https://github.com/apache/kafka/commit/c08120f83f7318f15dcf14d525876d18caf6afd0
-// Message   https://github.com/apache/kafka/commit/443bd1dd82d45f1169b3d5ff83d62c4e9220511c
+// Message   https://github.com/apache/kafka/commit/e71f68d6c91394db30bb1219ea882232f7be194d
 
 pub mod api_versions_request;
 pub mod api_versions_response;

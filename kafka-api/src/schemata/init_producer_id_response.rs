@@ -18,6 +18,14 @@ use bytes::BufMut;
 
 use crate::codec::*;
 
+// Starting in version 1, on quota violation, brokers send out responses before throttling.
+//
+// Version 2 is the first flexible version.
+//
+// Version 3 is the same as version 2.
+//
+// Version 4 adds the support for new error code PRODUCER_FENCED.
+
 #[derive(Debug, Default, Clone)]
 pub struct InitProducerIdResponse {
     /// The duration in milliseconds for which the request was throttled due to a quota violation,
