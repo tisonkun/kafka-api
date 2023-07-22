@@ -42,6 +42,7 @@ use kafka_api::{
     },
     produce_request::ProduceRequest,
     produce_response::{PartitionProduceResponse, ProduceResponse, TopicProduceResponse},
+    request_header::RequestHeader,
     sync_group_request::SyncGroupRequest,
     sync_group_response::SyncGroupResponse,
     Request, Response,
@@ -216,7 +217,12 @@ impl Broker {
         }
     }
 
-    pub fn reply(&mut self, client_info: ClientInfo, request: Request) -> Response {
+    pub fn reply(
+        &mut self,
+        client_info: ClientInfo,
+        _header: RequestHeader,
+        request: Request,
+    ) -> Response {
         let response = match request {
             Request::ApiVersionsRequest(request) => {
                 Response::ApiVersionsResponse(self.receive_api_versions(request))

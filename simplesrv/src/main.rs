@@ -95,7 +95,7 @@ fn dispatch(mut socket: TcpStream, broker: Arc<Mutex<Broker>>) -> io::Result<()>
                 client_host: client_host.to_string(),
             };
             let mut broker = broker.lock().unwrap();
-            broker.reply(client_info, request)
+            broker.reply(client_info, header.clone(), request)
         };
         let bs = response.encode_alloc(header)?;
         socket.write_all(bs.as_ref())?;
