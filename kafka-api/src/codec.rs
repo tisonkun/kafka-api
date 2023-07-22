@@ -219,30 +219,13 @@ impl Decoder<Option<String>> for NullableString {
 
 impl Encoder<Option<&str>> for NullableString {
     fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&str>) -> io::Result<()> {
-        match value {
-            None => {
-                if self.0 {
-                    VarInt.encode(buf, 0)
-                } else {
-                    Int32.encode(buf, -1)
-                }
-            }
-            Some(s) => self.encode(buf, s),
-        }
+        write_slice(buf, value.map(|s| s.as_bytes()), self.0)
     }
 }
 
 impl Encoder<&str> for NullableString {
     fn encode<B: BufMut>(&self, buf: &mut B, value: &str) -> io::Result<()> {
-        let bs = value.as_bytes();
-        let len = bs.len() as i16;
-        if self.0 {
-            VarInt.encode(buf, len as i32 + 1)?;
-        } else {
-            Int16.encode(buf, len)?;
-        }
-        buf.put_slice(bs);
-        Ok(())
+        write_slice(buf, Some(value.as_bytes()), self.0)
     }
 }
 
@@ -272,31 +255,36 @@ impl Decoder<Option<bytes::Bytes>> for NullableBytes {
 
 impl Encoder<Option<&bytes::Bytes>> for NullableBytes {
     fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&bytes::Bytes>) -> io::Result<()> {
-        match value {
-            None => {
-                if self.0 {
-                    VarInt.encode(buf, 0)
-                } else {
-                    Int32.encode(buf, -1)
-                }
-            }
-            Some(s) => self.encode(buf, s),
-        }
+        write_slice(buf, value.map(|bs| bs.as_ref()), self.0)
     }
 }
 
 impl Encoder<&bytes::Bytes> for NullableBytes {
     fn encode<B: BufMut>(&self, buf: &mut B, value: &bytes::Bytes) -> io::Result<()> {
-        let bs = value.as_ref();
-        let len = bs.len() as i16;
-        if self.0 {
-            VarInt.encode(buf, len as i32 + 1)?;
-        } else {
-            Int16.encode(buf, len)?;
-        }
-        buf.put_slice(bs);
-        Ok(())
+        write_slice(buf, Some(value.as_ref()), self.0)
     }
+}
+
+fn write_slice<B: BufMut>(buf: &mut B, slice: Option<&[u8]>, flexible: bool) -> io::Result<()> {
+    match slice {
+        None => {
+            if flexible {
+                VarInt.encode(buf, 0)?
+            } else {
+                Int32.encode(buf, -1)?
+            }
+        }
+        Some(bs) => {
+            let len = bs.len() as i16;
+            if flexible {
+                VarInt.encode(buf, len as i32 + 1)?;
+            } else {
+                Int16.encode(buf, len)?;
+            }
+            buf.put_slice(bs);
+        }
+    }
+    Ok(())
 }
 
 fn read_exact_bytes_of<B: Buf>(buf: &mut B, n: usize, ty: &str) -> io::Result<bytes::Bytes> {
