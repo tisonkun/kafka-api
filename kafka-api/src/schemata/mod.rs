@@ -71,33 +71,33 @@ impl Request {
         let api_version = header.request_api_version;
 
         let request = match api_type {
-            ApiMessageType::ApiVersions => {
+            ApiMessageType::API_VERSIONS => {
                 api_versions_request::ApiVersionsRequest::decode(cursor, api_version)
                     .map(Request::ApiVersionsRequest)
             }
-            ApiMessageType::CreateTopics => {
+            ApiMessageType::CREATE_TOPICS => {
                 create_topic_request::CreateTopicsRequest::decode(cursor, api_version)
                     .map(Request::CreateTopicRequest)
             }
-            ApiMessageType::FindCoordinator => {
+            ApiMessageType::FIND_COORDINATOR => {
                 find_coordinator_request::FindCoordinatorRequest::decode(cursor, api_version)
                     .map(Request::FindCoordinatorRequest)
             }
-            ApiMessageType::InitProducerId => {
+            ApiMessageType::INIT_PRODUCER_ID => {
                 init_producer_id_request::InitProducerIdRequest::decode(cursor, api_version)
                     .map(Request::InitProducerIdRequest)
             }
-            ApiMessageType::JoinGroup => {
+            ApiMessageType::JOIN_GROUP => {
                 join_group_request::JoinGroupRequest::decode(cursor, api_version)
                     .map(Request::JoinGroupRequest)
             }
-            ApiMessageType::Metadata => {
+            ApiMessageType::METADATA => {
                 metadata_request::MetadataRequest::decode(cursor, api_version)
                     .map(Request::MetadataRequest)
             }
-            ApiMessageType::Produce => produce_request::ProduceRequest::decode(cursor, api_version)
+            ApiMessageType::PRODUCE => produce_request::ProduceRequest::decode(cursor, api_version)
                 .map(Request::ProduceRequest),
-            ApiMessageType::SyncGroup => {
+            ApiMessageType::SYNC_GROUP => {
                 sync_group_request::SyncGroupRequest::decode(cursor, api_version)
                     .map(Request::SyncGroupRequest)
             }

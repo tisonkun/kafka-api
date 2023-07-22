@@ -511,13 +511,13 @@ impl Broker {
 
 const fn supported_apis() -> &'static [ApiMessageType] {
     &[
-        ApiMessageType::ApiVersions,
-        ApiMessageType::CreateTopics,
-        ApiMessageType::FindCoordinator,
-        ApiMessageType::InitProducerId,
-        ApiMessageType::JoinGroup,
-        ApiMessageType::Metadata,
-        ApiMessageType::Produce,
-        ApiMessageType::SyncGroup,
+        ApiMessageType::API_VERSIONS,
+        ApiMessageType::CREATE_TOPICS,
+        ApiMessageType::FIND_COORDINATOR,
+        ApiMessageType::INIT_PRODUCER_ID,
+        ApiMessageType::JOIN_GROUP,
+        ApiMessageType::METADATA,
+        ApiMessageType::PRODUCE,
+        ApiMessageType::SYNC_GROUP,
     ]
 }
