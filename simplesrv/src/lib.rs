@@ -35,6 +35,11 @@ use kafka_api::{
     metadata_response::{
         MetadataResponse, MetadataResponseBroker, MetadataResponsePartition, MetadataResponseTopic,
     },
+    offset_fetch_request::OffsetFetchRequest,
+    offset_fetch_response::{
+        OffsetFetchResponse, OffsetFetchResponseGroup, OffsetFetchResponsePartitions,
+        OffsetFetchResponseTopics,
+    },
     produce_request::ProduceRequest,
     produce_response::{PartitionProduceResponse, ProduceResponse, TopicProduceResponse},
     sync_group_request::SyncGroupRequest,
@@ -230,6 +235,9 @@ impl Broker {
             }
             Request::JoinGroupRequest(request) => {
                 Response::JoinGroupResponse(self.receive_join_group(client_info, request))
+            }
+            Request::OffsetFetchRequest(request) => {
+                Response::OffsetFetchResponse(self.receive_offset_fetch(request))
             }
             Request::ProduceRequest(request) => {
                 Response::ProduceResponse(self.receive_produce(request))
@@ -507,6 +515,38 @@ impl Broker {
             ..Default::default()
         }
     }
+
+    fn receive_offset_fetch(&mut self, request: OffsetFetchRequest) -> OffsetFetchResponse {
+        let mut groups = vec![];
+        for group in request.groups.iter() {
+            let mut topics = vec![];
+            for topic in group.topics.iter() {
+                let mut partitions = vec![];
+                for idx in topic.partition_indexes.iter() {
+                    partitions.push(OffsetFetchResponsePartitions {
+                        partition_index: *idx,
+                        committed_offset: 0,
+                        committed_leader_epoch: 0,
+                        ..Default::default()
+                    });
+                }
+                topics.push(OffsetFetchResponseTopics {
+                    name: topic.name.clone(),
+                    partitions,
+                    ..Default::default()
+                });
+            }
+            groups.push(OffsetFetchResponseGroup {
+                group_id: group.group_id.clone(),
+                topics,
+                ..Default::default()
+            });
+        }
+        OffsetFetchResponse {
+            groups,
+            ..Default::default()
+        }
+    }
 }
 
 const fn supported_apis() -> &'static [ApiMessageType] {
@@ -517,6 +557,7 @@ const fn supported_apis() -> &'static [ApiMessageType] {
         ApiMessageType::INIT_PRODUCER_ID,
         ApiMessageType::JOIN_GROUP,
         ApiMessageType::METADATA,
+        ApiMessageType::OFFSET_FETCH,
         ApiMessageType::PRODUCE,
         ApiMessageType::SYNC_GROUP,
     ]

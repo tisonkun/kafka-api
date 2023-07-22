@@ -38,6 +38,8 @@ pub mod join_group_request;
 pub mod join_group_response;
 pub mod metadata_request;
 pub mod metadata_response;
+pub mod offset_fetch_request;
+pub mod offset_fetch_response;
 pub mod produce_request;
 pub mod produce_response;
 pub mod request_header;
@@ -53,6 +55,7 @@ pub enum Request {
     InitProducerIdRequest(init_producer_id_request::InitProducerIdRequest),
     JoinGroupRequest(join_group_request::JoinGroupRequest),
     MetadataRequest(metadata_request::MetadataRequest),
+    OffsetFetchRequest(offset_fetch_request::OffsetFetchRequest),
     ProduceRequest(produce_request::ProduceRequest),
     SyncGroupRequest(sync_group_request::SyncGroupRequest),
 }
@@ -95,6 +98,10 @@ impl Request {
                 metadata_request::MetadataRequest::decode(cursor, api_version)
                     .map(Request::MetadataRequest)
             }
+            ApiMessageType::OFFSET_FETCH => {
+                offset_fetch_request::OffsetFetchRequest::decode(cursor, api_version)
+                    .map(Request::OffsetFetchRequest)
+            }
             ApiMessageType::PRODUCE => produce_request::ProduceRequest::decode(cursor, api_version)
                 .map(Request::ProduceRequest),
             ApiMessageType::SYNC_GROUP => {
@@ -116,6 +123,7 @@ pub enum Response {
     InitProducerIdResponse(init_producer_id_response::InitProducerIdResponse),
     JoinGroupResponse(join_group_response::JoinGroupResponse),
     MetadataResponse(metadata_response::MetadataResponse),
+    OffsetFetchResponse(offset_fetch_response::OffsetFetchResponse),
     ProduceResponse(produce_response::ProduceResponse),
     SyncGroupResponse(sync_group_response::SyncGroupResponse),
 }
@@ -141,6 +149,7 @@ impl Response {
             Response::InitProducerIdResponse(resp) => resp.encode(&mut buf, api_version)?,
             Response::JoinGroupResponse(resp) => resp.encode(&mut buf, api_version)?,
             Response::MetadataResponse(resp) => resp.encode(&mut buf, api_version)?,
+            Response::OffsetFetchResponse(resp) => resp.encode(&mut buf, api_version)?,
             Response::ProduceResponse(resp) => resp.encode(&mut buf, api_version)?,
             Response::SyncGroupResponse(resp) => resp.encode(&mut buf, api_version)?,
         }
