@@ -19,11 +19,11 @@ authors.workspace = true
 edition.workspace = true
 version.workspace = true
 license.workspace = true
+readme.workspace = true
 repository.workspace = true
 homepage.workspace = true
 
 description = "The rust language implementation of generic Kafka APIs."
-readme = "README.md"
 
 [dependencies]
 bytes = "1.4.0"
