@@ -30,6 +30,8 @@ pub mod api_versions_request;
 pub mod api_versions_response;
 pub mod create_topic_request;
 pub mod create_topic_response;
+pub mod fetch_request;
+pub mod fetch_response;
 pub mod find_coordinator_request;
 pub mod find_coordinator_response;
 pub mod init_producer_id_request;
@@ -51,6 +53,7 @@ pub mod sync_group_response;
 pub enum Request {
     ApiVersionsRequest(api_versions_request::ApiVersionsRequest),
     CreateTopicRequest(create_topic_request::CreateTopicsRequest),
+    FetchRequest(fetch_request::FetchRequest),
     FindCoordinatorRequest(find_coordinator_request::FindCoordinatorRequest),
     InitProducerIdRequest(init_producer_id_request::InitProducerIdRequest),
     JoinGroupRequest(join_group_request::JoinGroupRequest),
@@ -81,6 +84,9 @@ impl Request {
             ApiMessageType::CREATE_TOPICS => {
                 create_topic_request::CreateTopicsRequest::decode(cursor, api_version)
                     .map(Request::CreateTopicRequest)
+            }
+            ApiMessageType::FETCH => {
+                fetch_request::FetchRequest::decode(cursor, api_version).map(Request::FetchRequest)
             }
             ApiMessageType::FIND_COORDINATOR => {
                 find_coordinator_request::FindCoordinatorRequest::decode(cursor, api_version)
@@ -120,6 +126,7 @@ pub enum Response {
     ApiVersionsResponse(api_versions_response::ApiVersionsResponse),
     CreateTopicsResponse(create_topic_response::CreateTopicsResponse),
     FindCoordinatorResponse(find_coordinator_response::FindCoordinatorResponse),
+    FetchResponse(fetch_response::FetchResponse),
     InitProducerIdResponse(init_producer_id_response::InitProducerIdResponse),
     JoinGroupResponse(join_group_response::JoinGroupResponse),
     MetadataResponse(metadata_response::MetadataResponse),
@@ -146,6 +153,7 @@ impl Response {
             Response::ApiVersionsResponse(resp) => resp.encode(&mut buf, api_version)?,
             Response::CreateTopicsResponse(resp) => resp.encode(&mut buf, api_version)?,
             Response::FindCoordinatorResponse(resp) => resp.encode(&mut buf, api_version)?,
+            Response::FetchResponse(resp) => resp.encode(&mut buf, api_version)?,
             Response::InitProducerIdResponse(resp) => resp.encode(&mut buf, api_version)?,
             Response::JoinGroupResponse(resp) => resp.encode(&mut buf, api_version)?,
             Response::MetadataResponse(resp) => resp.encode(&mut buf, api_version)?,

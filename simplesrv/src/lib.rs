@@ -25,6 +25,8 @@ use kafka_api::{
     create_topic_request::CreateTopicsRequest,
     create_topic_response::{CreatableTopicResult, CreateTopicsResponse},
     error::Error,
+    fetch_request::FetchRequest,
+    fetch_response::{FetchResponse, FetchableTopicResponse, PartitionData},
     find_coordinator_request::FindCoordinatorRequest,
     find_coordinator_response::{Coordinator, FindCoordinatorResponse},
     init_producer_id_request::InitProducerIdRequest,
@@ -230,6 +232,7 @@ impl Broker {
             Request::CreateTopicRequest(request) => {
                 Response::CreateTopicsResponse(self.receive_create_topic(request))
             }
+            Request::FetchRequest(request) => Response::FetchResponse(self.receive_fetch(request)),
             Request::FindCoordinatorRequest(request) => {
                 Response::FindCoordinatorResponse(self.receive_find_coordinator(request))
             }
@@ -553,12 +556,47 @@ impl Broker {
             ..Default::default()
         }
     }
+
+    fn receive_fetch(&mut self, request: FetchRequest) -> FetchResponse {
+        let mut responses = vec![];
+        for topic in request.topics.iter() {
+            let topic_id = topic.topic_id; // TODO - topic name for formal version
+            let mut partitions = vec![];
+            for part in topic.partitions.iter() {
+                let idx = part.partition;
+                let partition = self
+                    .topic_partition_store
+                    .get(&(topic_id, idx))
+                    .expect("partition not found");
+                for record in partition {
+                    partitions.push(PartitionData {
+                        partition_index: idx,
+                        last_stable_offset: partition.len() as i64,
+                        // TODO - batch records
+                        records: record.clone(),
+                        ..Default::default()
+                    });
+                }
+            }
+            responses.push(FetchableTopicResponse {
+                topic_id,
+                partitions,
+                ..Default::default()
+            });
+        }
+        FetchResponse {
+            session_id: request.session_id,
+            responses,
+            ..Default::default()
+        }
+    }
 }
 
 const fn supported_apis() -> &'static [ApiMessageType] {
     &[
         ApiMessageType::API_VERSIONS,
         ApiMessageType::CREATE_TOPICS,
+        ApiMessageType::FETCH,
         ApiMessageType::FIND_COORDINATOR,
         ApiMessageType::INIT_PRODUCER_ID,
         ApiMessageType::JOIN_GROUP,

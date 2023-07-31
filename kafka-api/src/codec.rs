@@ -48,17 +48,33 @@ pub struct RawTaggedField {
 
 pub(super) struct RawTaggedFieldList;
 
-impl Decoder<Vec<RawTaggedField>> for RawTaggedFieldList {
-    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<Vec<RawTaggedField>> {
+impl RawTaggedFieldList {
+    pub(super) fn decode_with<B: Buf, F>(
+        &self,
+        buf: &mut B,
+        mut f: F,
+    ) -> io::Result<Vec<RawTaggedField>>
+    where
+        F: FnMut(&mut B, i32, usize) -> io::Result<bool>,
+    {
         let n = VarInt.decode(buf)?;
         let mut res = vec![];
         for _ in 0..n {
             let tag = VarInt.decode(buf)?;
             let size = VarInt.decode(buf)? as usize;
-            let data = read_exact_bytes_of(buf, size, "tagged fields")?;
-            res.push(RawTaggedField { tag, data });
+            let consumed = f(buf, tag, size)?;
+            if !consumed {
+                let data = read_exact_bytes_of(buf, size, "tagged fields")?;
+                res.push(RawTaggedField { tag, data });
+            }
         }
         Ok(res)
+    }
+}
+
+impl Decoder<Vec<RawTaggedField>> for RawTaggedFieldList {
+    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<Vec<RawTaggedField>> {
+        RawTaggedFieldList.decode_with(buf, |_, _, _| Ok(false))
     }
 }
 
