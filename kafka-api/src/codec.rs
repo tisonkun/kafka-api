@@ -16,7 +16,10 @@ use std::{io, mem::size_of};
 
 use bytes::{Buf, BufMut};
 
-use crate::{err_codec_message, err_io_other};
+use crate::{
+    err_codec_message, err_io_other,
+    record::{Header, Record, RecordBatch},
+};
 
 pub trait Decoder<T: Sized> {
     fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<T>;
@@ -209,6 +212,43 @@ impl Encoder<i32> for VarInt {
 }
 
 #[derive(Debug, Copy, Clone)]
+pub(super) struct VarLong;
+
+impl Decoder<i64> for VarLong {
+    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<i64> {
+        let mut res = 0;
+        for i in 0.. {
+            debug_assert!(i < 10); // no larger than i64
+            if buf.remaining() >= size_of::<u8>() {
+                let next = buf.get_u8() as i64;
+                res |= (next & 0x7F) << (i * 7);
+                if next < 0x80 {
+                    break;
+                }
+            } else {
+                return Err(err_codec_message(format!(
+                    "no enough bytes when decode varlong (res: {res}, remaining: {})",
+                    buf.remaining()
+                )));
+            }
+        }
+        Ok(res)
+    }
+}
+
+impl Encoder<i64> for VarLong {
+    fn encode<B: BufMut>(&self, buf: &mut B, value: i64) -> io::Result<()> {
+        let mut v = value;
+        while v >= 0x80 {
+            buf.put_u8((v as u8) | 0x80);
+            v >>= 7;
+        }
+        buf.put_u8(v as u8);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
 pub(super) struct NullableString(pub bool /* flexible */);
 
 impl Decoder<Option<String>> for NullableString {
@@ -218,17 +258,13 @@ impl Decoder<Option<String>> for NullableString {
         } else {
             Int16.decode(buf)? as i32
         };
-        match len {
-            -1 => Ok(None),
-            n if n >= 0 => {
-                let n = n as usize;
-                let bs = read_exact_bytes_of(buf, n, "string")?;
+
+        match read_nullable_bytes(buf, len, "string")? {
+            None => Ok(None),
+            Some(bs) => {
                 let str = String::from_utf8(bs.to_vec()).map_err(err_io_other)?;
                 Ok(Some(str))
             }
-            n => Err(err_codec_message(format!(
-                "illegal length {n} when decode string"
-            ))),
         }
     }
 }
@@ -255,17 +291,7 @@ impl Decoder<Option<bytes::Bytes>> for NullableBytes {
         } else {
             Int16.decode(buf)? as i32
         };
-        match len {
-            -1 => Ok(None),
-            n if n >= 0 => {
-                let n = n as usize;
-                let bs = read_exact_bytes_of(buf, n, "bytes")?;
-                Ok(Some(bs))
-            }
-            n => Err(err_codec_message(format!(
-                "illegal length {n} when decode bytes"
-            ))),
-        }
+        read_nullable_bytes(buf, len, "bytes")
     }
 }
 
@@ -301,6 +327,24 @@ fn write_slice<B: BufMut>(buf: &mut B, slice: Option<&[u8]>, flexible: bool) -> 
         }
     }
     Ok(())
+}
+
+fn read_nullable_bytes<B: Buf>(
+    buf: &mut B,
+    len: i32,
+    ty: &str,
+) -> io::Result<Option<bytes::Bytes>> {
+    match len {
+        -1 => Ok(None),
+        n if n >= 0 => {
+            let n = n as usize;
+            let bs = read_exact_bytes_of(buf, n, ty)?;
+            Ok(Some(bs))
+        }
+        n => Err(err_codec_message(format!(
+            "illegal length {n} when decode {ty}"
+        ))),
+    }
 }
 
 fn read_exact_bytes_of<B: Buf>(buf: &mut B, n: usize, ty: &str) -> io::Result<bytes::Bytes> {
@@ -407,5 +451,112 @@ impl Encoder<uuid::Uuid> for Uuid {
                 buf.remaining_mut()
             )))
         }
+    }
+}
+
+fn varint_zigzag(i: i32) -> i32 {
+    (((i as u32) >> 1) as i32) ^ -(i & 1)
+}
+
+fn varlong_zigzag(i: i64) -> i64 {
+    (((i as u64) >> 1) as i64) ^ -(i & 1)
+}
+
+const OFFSET_OFFSET: usize = 0;
+const OFFSET_LENGTH: usize = 8;
+const SIZE_OFFSET: usize = OFFSET_OFFSET + OFFSET_LENGTH;
+const SIZE_LENGTH: usize = 4;
+const LOG_OVERHEAD: usize = SIZE_OFFSET + SIZE_LENGTH;
+/// The magic offset is at the same offset for all current message formats, but the 4 bytes
+/// between the size and the magic is dependent on the version.
+const MAGIC_OFFSET: usize = LOG_OVERHEAD + 4;
+const MAGIC_LENGTH: usize = 1;
+const HEADER_SIZE_UP_TO_MAGIC: usize = MAGIC_OFFSET + MAGIC_LENGTH;
+
+#[derive(Debug, Copy, Clone)]
+pub struct Records;
+
+impl Records {
+    pub fn decode_batches(&self, buf: &mut bytes::Bytes) -> io::Result<Vec<RecordBatch>> {
+        let mut records = vec![];
+
+        while buf.has_remaining() {
+            if buf.remaining() < HEADER_SIZE_UP_TO_MAGIC {
+                Err(err_codec_message(format!(
+                    "no enough bytes when decode record batch (remaining: {})",
+                    buf.remaining()
+                )))?
+            }
+
+            let record_size = buf.slice(SIZE_OFFSET..).get_i32();
+            let batch_size = record_size as usize + LOG_OVERHEAD;
+            if buf.remaining() < batch_size {
+                Err(err_codec_message(format!(
+                    "no enough bytes when decode record batch (remaining: {})",
+                    buf.remaining()
+                )))?
+            }
+
+            let record = match buf.slice(MAGIC_OFFSET..).get_i8() {
+                2 => Records.decode_batch(&mut buf.copy_to_bytes(batch_size))?,
+                v => unimplemented!("batch encode version {}", v),
+            };
+
+            records.push(record);
+        }
+
+        Ok(records)
+    }
+
+    fn decode_batch(&self, buf: &mut bytes::Bytes) -> io::Result<RecordBatch> {
+        let mut batch = RecordBatch {
+            base_offset: Int64.decode(buf)?,
+            batch_len: Int32.decode(buf)?,
+            partition_leader_epoch: Int32.decode(buf)?,
+            magic: Int8.decode(buf)?,
+            crc: Int32.decode(buf)?,
+            attributes: Int16.decode(buf)?,
+            last_offset_delta: Int32.decode(buf)?,
+            base_timestamp: Int64.decode(buf)?,
+            max_timestamp: Int64.decode(buf)?,
+            producer_id: Int64.decode(buf)?,
+            producer_epoch: Int16.decode(buf)?,
+            base_sequence: Int32.decode(buf)?,
+            records: vec![],
+        };
+
+        // records
+        let records_cnt = Int32.decode(buf)?;
+        for _ in 0..records_cnt {
+            let mut record = Record {
+                len: varint_zigzag(VarInt.decode(buf)?),
+                attributes: Int8.decode(buf)?,
+                timestamp_delta: varlong_zigzag(VarLong.decode(buf)?),
+                offset_delta: varint_zigzag(VarInt.decode(buf)?),
+                ..Default::default()
+            };
+            {
+                let len = varint_zigzag(VarInt.decode(buf)?);
+                record.key_len = len;
+                record.key = read_nullable_bytes(buf, len, "bytes")?;
+            }
+            {
+                let len = varint_zigzag(VarInt.decode(buf)?);
+                record.value_len = len;
+                record.value = read_nullable_bytes(buf, len, "bytes")?;
+            }
+            let headers_cnt = varint_zigzag(VarInt.decode(buf)?);
+            for _ in 0..headers_cnt {
+                record.headers.push(Header {
+                    key_len: varint_zigzag(VarInt.decode(buf)?),
+                    key: read_nullable_bytes(buf, record.key_len, "bytes")?,
+                    value_len: varint_zigzag(VarInt.decode(buf)?),
+                    value: read_nullable_bytes(buf, record.value_len, "bytes")?,
+                });
+            }
+            batch.records.push(record);
+        }
+
+        Ok(batch)
     }
 }

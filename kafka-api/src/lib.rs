@@ -16,12 +16,13 @@
 
 use std::{fmt::Display, io};
 
-pub use codec::{Decodable, Encodable, RawTaggedField};
+pub use codec::{Decodable, Encodable, RawTaggedField, Records};
 pub use schemata::*;
 
 pub mod apikey;
 pub(crate) mod codec;
 pub mod error;
+pub mod record;
 mod schemata;
 
 fn err_io_other<E>(error: E) -> io::Error

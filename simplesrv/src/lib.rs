@@ -381,6 +381,12 @@ impl Broker {
             for partition in topic.partition_data {
                 let idx = partition.index;
                 if let Some(record) = partition.records {
+                    trace!(
+                        "Produce message: {:?}",
+                        kafka_api::Records
+                            .decode_batches(&mut (record.clone()))
+                            .expect("cannot decode record batches")
+                    );
                     // TODO - return error on topic partition not exist
                     let store = self
                         .topic_partition_store
