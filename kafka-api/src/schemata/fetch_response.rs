@@ -16,7 +16,7 @@ use std::io;
 
 use bytes::BufMut;
 
-use crate::{codec::*, err_encode_message_unsupported};
+use crate::{codec::*, err_encode_message_unsupported, record::Records};
 
 // Version 1 adds throttle time.
 //
@@ -134,7 +134,7 @@ pub struct PartitionData {
     /// The preferred read replica for the consumer to use on its next fetch request
     pub preferred_read_replica: i32,
     /// The record data.
-    pub records: bytes::Bytes,
+    pub records: Records,
     /// Unknown tagged fields.
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
@@ -176,7 +176,7 @@ impl Encodable for PartitionData {
         if version >= 11 {
             Int32.encode(buf, self.preferred_read_replica)?;
         }
-        NullableBytes(version >= 12).encode(buf, &self.records)?;
+        NullableBytes(version >= 12).encode(buf, self.records.as_slice())?;
         if version >= 12 {
             let mut unknown_tagged_fields = vec![];
             if let Some(diverging_epoch) = &self.diverging_epoch {

@@ -45,6 +45,7 @@ use kafka_api::{
     },
     produce_request::ProduceRequest,
     produce_response::{PartitionProduceResponse, ProduceResponse, TopicProduceResponse},
+    record::RecordBatch,
     request_header::RequestHeader,
     sync_group_request::SyncGroupRequest,
     sync_group_response::SyncGroupResponse,
@@ -261,6 +262,18 @@ impl Broker {
         response
     }
 
+    fn base_offset(&self, topic: uuid::Uuid, partition: i32) -> i64 {
+        match self.topic_partition_store.get(&(topic, partition)) {
+            None => 0,
+            Some(store) => match store.last() {
+                None => 0,
+                Some(record) => {
+                    let record = RecordBatch::new(record);
+                }
+            },
+        }
+    }
+
     fn receive_api_versions(&mut self, _request: ApiVersionsRequest) -> ApiVersionsResponse {
         let api_keys = supported_apis()
             .iter()
@@ -381,12 +394,12 @@ impl Broker {
             for partition in topic.partition_data {
                 let idx = partition.index;
                 if let Some(record) = partition.records {
-                    trace!(
-                        "Produce message: {:?}",
-                        kafka_api::Records
-                            .decode_batches(&mut (record.clone()))
-                            .expect("cannot decode record batches")
-                    );
+                    // trace!(
+                    //     "Produce message: {:?}",
+                    //     kafka_api::Records
+                    //         .decode_batches(&mut (record.clone()))
+                    //         .expect("cannot decode record batches")
+                    // );
                     // TODO - return error on topic partition not exist
                     let store = self
                         .topic_partition_store
@@ -576,7 +589,8 @@ impl Broker {
                     .get(&(topic_id, idx))
                     .expect("partition not found");
                 let mut records = BytesMut::new();
-                for record in partition {
+                let fetch_offset = part.fetch_offset as usize;
+                for record in &partition[fetch_offset..] {
                     records.put_slice(record);
                 }
                 let committed_index = partition.len() as i64;

@@ -14,7 +14,7 @@
 
 use std::{
     io,
-    io::{Cursor, Read, Write},
+    io::{Read, Write},
     mem::size_of,
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{Arc, Mutex},
@@ -78,15 +78,15 @@ fn dispatch(mut socket: TcpStream, broker: Arc<Mutex<Broker>>) -> io::Result<()>
             socket.read_exact(&mut buf)?;
             i32::from_be_bytes(buf) as usize
         };
-        let buf = {
+
+        let mut buf = {
             let mut buf = vec![0u8; n];
             socket.read_exact(&mut buf)?;
-            buf
+            bytes::BytesMut::from_iter(buf)
         };
 
-        let mut cursor = Cursor::new(buf.as_slice());
-        let (header, request) = Request::decode(&mut cursor)?;
-        assert!(!cursor.has_remaining(), "remaining bytes unparsed");
+        let (header, request) = Request::decode(&mut buf)?;
+        assert!(!buf.has_remaining(), "remaining bytes unparsed");
         debug!("Receive request {request:?}");
 
         let response = {

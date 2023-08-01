@@ -18,7 +18,7 @@ use bytes::{Buf, BufMut};
 
 use crate::{
     err_codec_message, err_io_other,
-    record::{Header, Record, RecordBatch},
+    record::{Header, Record},
 };
 
 pub trait Decoder<T: Sized> {
@@ -307,6 +307,12 @@ impl Encoder<&bytes::Bytes> for NullableBytes {
     }
 }
 
+impl Encoder<&[u8]> for NullableBytes {
+    fn encode<B: BufMut>(&self, buf: &mut B, value: &[u8]) -> io::Result<()> {
+        write_slice(buf, Some(value), self.0)
+    }
+}
+
 fn write_slice<B: BufMut>(buf: &mut B, slice: Option<&[u8]>, flexible: bool) -> io::Result<()> {
     match slice {
         None => {
@@ -462,72 +468,14 @@ fn varlong_zigzag(i: i64) -> i64 {
     (((i as u64) >> 1) as i64) ^ -(i & 1)
 }
 
-const OFFSET_OFFSET: usize = 0;
-const OFFSET_LENGTH: usize = 8;
-const SIZE_OFFSET: usize = OFFSET_OFFSET + OFFSET_LENGTH;
-const SIZE_LENGTH: usize = 4;
-const LOG_OVERHEAD: usize = SIZE_OFFSET + SIZE_LENGTH;
-/// The magic offset is at the same offset for all current message formats, but the 4 bytes
-/// between the size and the magic is dependent on the version.
-const MAGIC_OFFSET: usize = LOG_OVERHEAD + 4;
-const MAGIC_LENGTH: usize = 1;
-const HEADER_SIZE_UP_TO_MAGIC: usize = MAGIC_OFFSET + MAGIC_LENGTH;
-
 #[derive(Debug, Copy, Clone)]
-pub struct Records;
+pub(super) struct RecordList;
 
-impl Records {
-    pub fn decode_batches(&self, buf: &mut bytes::Bytes) -> io::Result<Vec<RecordBatch>> {
+impl Decoder<Vec<Record>> for RecordList {
+    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<Vec<Record>> {
+        let cnt = Int32.decode(buf)?;
         let mut records = vec![];
-
-        while buf.has_remaining() {
-            if buf.remaining() < HEADER_SIZE_UP_TO_MAGIC {
-                Err(err_codec_message(format!(
-                    "no enough bytes when decode record batch (remaining: {})",
-                    buf.remaining()
-                )))?
-            }
-
-            let record_size = buf.slice(SIZE_OFFSET..).get_i32();
-            let batch_size = record_size as usize + LOG_OVERHEAD;
-            if buf.remaining() < batch_size {
-                Err(err_codec_message(format!(
-                    "no enough bytes when decode record batch (remaining: {})",
-                    buf.remaining()
-                )))?
-            }
-
-            let record = match buf.slice(MAGIC_OFFSET..).get_i8() {
-                2 => Records.decode_batch(&mut buf.copy_to_bytes(batch_size))?,
-                v => unimplemented!("batch encode version {}", v),
-            };
-
-            records.push(record);
-        }
-
-        Ok(records)
-    }
-
-    fn decode_batch(&self, buf: &mut bytes::Bytes) -> io::Result<RecordBatch> {
-        let mut batch = RecordBatch {
-            base_offset: Int64.decode(buf)?,
-            batch_len: Int32.decode(buf)?,
-            partition_leader_epoch: Int32.decode(buf)?,
-            magic: Int8.decode(buf)?,
-            crc: Int32.decode(buf)?,
-            attributes: Int16.decode(buf)?,
-            last_offset_delta: Int32.decode(buf)?,
-            base_timestamp: Int64.decode(buf)?,
-            max_timestamp: Int64.decode(buf)?,
-            producer_id: Int64.decode(buf)?,
-            producer_epoch: Int16.decode(buf)?,
-            base_sequence: Int32.decode(buf)?,
-            records: vec![],
-        };
-
-        // records
-        let records_cnt = Int32.decode(buf)?;
-        for _ in 0..records_cnt {
+        for _ in 0..cnt {
             let mut record = Record {
                 len: varint_zigzag(VarInt.decode(buf)?),
                 attributes: Int8.decode(buf)?,
@@ -554,9 +502,8 @@ impl Records {
                     value: read_nullable_bytes(buf, record.value_len, "bytes")?,
                 });
             }
-            batch.records.push(record);
+            records.push(record);
         }
-
-        Ok(batch)
+        Ok(records)
     }
 }

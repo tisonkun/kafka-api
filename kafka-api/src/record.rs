@@ -12,33 +12,139 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::{
+    fmt::{Debug, Formatter},
+    io,
+    io::Cursor,
+};
+
+use bytes::{Buf, BufMut};
+
+use crate::{
+    codec::{Decoder, RecordList},
+    err_codec_message,
+};
+
+pub const BASE_OFFSET_OFFSET: usize = 0;
+pub const BASE_OFFSET_LENGTH: usize = 8;
+pub const LENGTH_OFFSET: usize = BASE_OFFSET_OFFSET + BASE_OFFSET_LENGTH;
+pub const LENGTH_LENGTH: usize = 4;
+pub const PARTITION_LEADER_EPOCH_OFFSET: usize = LENGTH_OFFSET + LENGTH_LENGTH;
+pub const PARTITION_LEADER_EPOCH_LENGTH: usize = 4;
+pub const MAGIC_OFFSET: usize = PARTITION_LEADER_EPOCH_OFFSET + PARTITION_LEADER_EPOCH_LENGTH;
+pub const MAGIC_LENGTH: usize = 1;
+pub const CRC_OFFSET: usize = MAGIC_OFFSET + MAGIC_LENGTH;
+pub const CRC_LENGTH: usize = 4;
+pub const ATTRIBUTES_OFFSET: usize = CRC_OFFSET + CRC_LENGTH;
+pub const ATTRIBUTE_LENGTH: usize = 2;
+pub const LAST_OFFSET_DELTA_OFFSET: usize = ATTRIBUTES_OFFSET + ATTRIBUTE_LENGTH;
+pub const LAST_OFFSET_DELTA_LENGTH: usize = 4;
+pub const BASE_TIMESTAMP_OFFSET: usize = LAST_OFFSET_DELTA_OFFSET + LAST_OFFSET_DELTA_LENGTH;
+pub const BASE_TIMESTAMP_LENGTH: usize = 8;
+pub const MAX_TIMESTAMP_OFFSET: usize = BASE_TIMESTAMP_OFFSET + BASE_TIMESTAMP_LENGTH;
+pub const MAX_TIMESTAMP_LENGTH: usize = 8;
+pub const PRODUCER_ID_OFFSET: usize = MAX_TIMESTAMP_OFFSET + MAX_TIMESTAMP_LENGTH;
+pub const PRODUCER_ID_LENGTH: usize = 8;
+pub const PRODUCER_EPOCH_OFFSET: usize = PRODUCER_ID_OFFSET + PRODUCER_ID_LENGTH;
+pub const PRODUCER_EPOCH_LENGTH: usize = 2;
+pub const BASE_SEQUENCE_OFFSET: usize = PRODUCER_EPOCH_OFFSET + PRODUCER_EPOCH_LENGTH;
+pub const BASE_SEQUENCE_LENGTH: usize = 4;
+pub const RECORDS_COUNT_OFFSET: usize = BASE_SEQUENCE_OFFSET + BASE_SEQUENCE_LENGTH;
+pub const RECORDS_COUNT_LENGTH: usize = 4;
+pub const RECORDS_OFFSET: usize = RECORDS_COUNT_OFFSET + RECORDS_COUNT_LENGTH;
+pub const RECORD_BATCH_OVERHEAD: usize = RECORDS_OFFSET;
+
+pub const HEADER_SIZE_UP_TO_MAGIC: usize = MAGIC_OFFSET + MAGIC_LENGTH;
+pub const LOG_OVERHEAD: usize = LENGTH_OFFSET + LENGTH_LENGTH;
+
 #[derive(Debug, Default, Clone)]
-pub struct RecordBatch {
-    pub base_offset: i64,
-    pub batch_len: i32,
-    pub partition_leader_epoch: i32,
-    pub magic: i8,
-    pub crc: i32,
-    /// bit 0~2:
-    ///    0: no compression
-    ///    1: gzip
-    ///    2: snappy
-    ///    3: lz4
-    ///    4: zstd
-    /// bit 3: timestampType
-    /// bit 4: isTransactional (0 means not transactional)
-    /// bit 5: isControlBatch (0 means not a control batch)
-    /// bit 6: hasDeleteHorizonMs (0 means baseTimestamp is not set as the delete horizon for
-    /// compaction)
-    /// bit 7~15: unused
-    pub attributes: i16,
-    pub last_offset_delta: i32,
-    pub base_timestamp: i64,
-    pub max_timestamp: i64,
-    pub producer_id: i64,
-    pub producer_epoch: i16,
-    pub base_sequence: i32,
-    pub records: Vec<Record>,
+pub struct Records {
+    buf: Vec<u8>,
+}
+
+impl Records {
+    pub fn new(bs: bytes::Bytes) -> Self {
+        // Bytes to Vec with a PROMOTABLE_{ODD|EVEN}_VTABLE should be zero-copy.
+        Records { buf: bs.into() }
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        self.buf.as_slice()
+    }
+
+    pub fn batches(&mut self) -> io::Result<Vec<RecordBatch<'_>>> {
+        let mut records = vec![];
+        let mut remaining = &mut self.buf[..];
+        while remaining.len() > 0 {
+            if remaining.len() < HEADER_SIZE_UP_TO_MAGIC {
+                Err(err_codec_message(format!(
+                    "no enough bytes when decode records (remaining: {})",
+                    remaining.len()
+                )))?
+            }
+
+            let record_size = (&remaining[LENGTH_OFFSET..]).get_i32();
+            let batch_size = record_size as usize + LOG_OVERHEAD;
+            if remaining.len() < batch_size {
+                Err(err_codec_message(format!(
+                    "no enough bytes when decode records (remaining: {})",
+                    remaining.len()
+                )))?
+            }
+
+            let record = match (&remaining[MAGIC_OFFSET..]).get_i8() {
+                2 => {
+                    let (a, b) = remaining.split_at_mut(batch_size);
+                    remaining = b;
+                    RecordBatch { buf: a }
+                }
+                v => unimplemented!("record batch version {}", v),
+            };
+
+            records.push(record);
+        }
+        Ok(records)
+    }
+}
+
+pub struct RecordBatch<'a> {
+    buf: &'a mut [u8],
+}
+
+impl Debug for RecordBatch<'_> {
+    fn fmt(&self, _f: &mut Formatter<'_>) -> std::fmt::Result {
+        todo!("dump fields - this can be a time consuming method")
+    }
+}
+
+impl<'a> RecordBatch<'a> {
+    pub fn set_last_offset(&mut self, offset: i64) {
+        let base_offset = offset - self.last_offset_delta();
+        self.slice_mut(BASE_OFFSET_OFFSET).put_i64(base_offset);
+    }
+
+    pub fn last_offset_delta(&self) -> i64 {
+        self.slice(LAST_OFFSET_DELTA_OFFSET).get_i64()
+    }
+
+    pub fn count(&self) -> i32 {
+        self.slice(RECORDS_COUNT_OFFSET).get_i32()
+    }
+
+    pub fn records(&self) -> Vec<Record> {
+        let mut cursor = self.slice(RECORDS_COUNT_OFFSET);
+        RecordList.decode(&mut cursor).expect("malformed records")
+    }
+
+    fn slice_mut(&mut self, pos: usize) -> &mut [u8] {
+        &mut self.buf[pos..]
+    }
+
+    fn slice(&self, pos: usize) -> Cursor<&[u8]> {
+        let mut cursor = Cursor::new(&self.buf[..]);
+        cursor.set_position(pos as u64);
+        cursor
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -67,11 +173,9 @@ pub struct Header {
 mod tests {
     use std::io;
 
-    use bytes::Bytes;
+    use super::*;
 
-    use crate::codec::Records;
-
-    const RECORD: [u8; 94] = [
+    const RECORD: &[u8] = &[
         0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // first offset
         0x0, 0x0, 0x0, 0x52, // record batch size
         0xFF, 0xFF, 0xFF, 0xFF, // partition leader epoch
@@ -99,20 +203,20 @@ mod tests {
 
     #[test]
     fn test_codec_records() -> io::Result<()> {
-        let mut bs = Bytes::from_static(&RECORD);
-        let record_batches = Records.decode_batches(&mut bs)?;
+        let mut records = Records {
+            buf: Vec::from(RECORD),
+        };
+        let record_batches = records.batches()?;
         assert_eq!(record_batches.len(), 1);
         let record_batch = &record_batches[0];
-        assert_eq!(record_batch.magic, 2);
-        assert_eq!(record_batch.records.len(), 1);
-        let record = &record_batch.records[0];
+        assert_eq!(record_batch.count(), 1);
+        let record_vec = record_batch.records();
+        assert_eq!(record_vec.len(), 1);
+        let record = &record_vec[0];
         assert_eq!(record.key_len, -1);
         assert_eq!(record.key, None);
         assert_eq!(record.value_len, 26);
-        assert_eq!(
-            record.value,
-            Some(Bytes::from_static("This is the first message.".as_ref()))
-        );
+        assert_eq!(record.value, Some("This is the first message.".into()));
         Ok(())
     }
 }

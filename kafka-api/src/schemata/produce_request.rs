@@ -16,7 +16,7 @@ use std::io;
 
 use bytes::Buf;
 
-use crate::{codec::*, err_decode_message_null, err_decode_message_unsupported};
+use crate::{codec::*, err_decode_message_null, err_decode_message_unsupported, record::Records};
 
 // Version 1 and 2 are the same as version 0.
 //
@@ -104,7 +104,7 @@ pub struct PartitionProduceData {
     /// The partition index.
     pub index: i32,
     /// The record data to be produced.
-    pub records: Option<bytes::Bytes>,
+    pub records: Option<Records>,
     /// Unknown tagged fields.
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
@@ -119,7 +119,7 @@ impl Decodable for PartitionProduceData {
         }
         let mut this = PartitionProduceData {
             index: Int32.decode(buf)?,
-            records: NullableBytes(version >= 9).decode(buf)?,
+            records: NullableBytes(version >= 9).decode(buf)?.map(Records::new),
             ..Default::default()
         };
         if version >= 9 {
