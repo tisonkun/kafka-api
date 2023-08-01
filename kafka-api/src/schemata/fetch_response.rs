@@ -107,7 +107,7 @@ impl Encodable for FetchableTopicResponse {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct PartitionData {
     /// The topic name.
     pub partition_index: i32,
@@ -137,6 +137,25 @@ pub struct PartitionData {
     pub records: bytes::Bytes,
     /// Unknown tagged fields.
     pub unknown_tagged_fields: Vec<RawTaggedField>,
+}
+
+impl Default for PartitionData {
+    fn default() -> Self {
+        PartitionData {
+            partition_index: 0,
+            error_code: 0,
+            high_watermark: 0,
+            last_stable_offset: -1,
+            log_start_offset: -1,
+            diverging_epoch: None,
+            current_leader: None,
+            snapshot_id: None,
+            aborted_transactions: None,
+            preferred_read_replica: -1,
+            records: Default::default(),
+            unknown_tagged_fields: vec![],
+        }
+    }
 }
 
 impl Encodable for PartitionData {
