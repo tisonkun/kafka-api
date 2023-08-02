@@ -41,8 +41,8 @@ pub struct InitProducerIdResponse {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for InitProducerIdResponse {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for InitProducerIdResponse {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int32.encode(buf, self.throttle_time_ms)?;
         Int16.encode(buf, self.error_code)?;
         Int64.encode(buf, self.producer_id)?;

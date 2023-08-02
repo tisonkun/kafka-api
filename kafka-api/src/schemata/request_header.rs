@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::Buf;
-
 use crate::codec::*;
 
 // Version 0 of the RequestHeader is only used by v0 of ControlledShutdownRequest.
@@ -38,8 +36,8 @@ pub struct RequestHeader {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for RequestHeader {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for RequestHeader {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         let mut res = RequestHeader {
             request_api_key: Int16.decode(buf)?,
             request_api_version: Int16.decode(buf)?,

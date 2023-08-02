@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::Buf;
-
 use crate::{codec::*, err_decode_message_null};
 
 // Versions 0 through 2 of ApiVersionsRequest are the same.
@@ -32,8 +30,8 @@ pub struct ApiVersionsRequest {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for ApiVersionsRequest {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for ApiVersionsRequest {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         let mut this = ApiVersionsRequest::default();
         if version >= 3 {
             this.client_software_name = NullableString(true)

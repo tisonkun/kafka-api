@@ -64,8 +64,8 @@ pub struct MetadataResponse {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for MetadataResponse {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for MetadataResponse {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 3 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -101,8 +101,8 @@ pub struct MetadataResponseBroker {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for MetadataResponseBroker {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for MetadataResponseBroker {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int32.encode(buf, self.node_id)?;
         NullableString(version >= 9).encode(buf, self.host.as_str())?;
         Int32.encode(buf, self.port)?;
@@ -134,8 +134,8 @@ pub struct MetadataResponseTopic {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for MetadataResponseTopic {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for MetadataResponseTopic {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int16.encode(buf, self.error_code)?;
         match self.name {
             None => {
@@ -186,8 +186,8 @@ pub struct MetadataResponsePartition {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for MetadataResponsePartition {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for MetadataResponsePartition {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int16.encode(buf, self.error_code)?;
         Int32.encode(buf, self.partition_index)?;
         Int32.encode(buf, self.leader_id)?;

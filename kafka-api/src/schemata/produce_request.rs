@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::Buf;
-
 use crate::{codec::*, err_decode_message_null, err_decode_message_unsupported, record::Records};
 
 // Version 1 and 2 are the same as version 0.
@@ -50,8 +48,8 @@ pub struct ProduceRequest {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for ProduceRequest {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for ProduceRequest {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         let mut this = ProduceRequest::default();
         if version >= 3 {
             this.transactional_id = NullableString(version >= 9).decode(buf)?;
@@ -78,8 +76,8 @@ pub struct TopicProduceData {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for TopicProduceData {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for TopicProduceData {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         if version > 9 {
             Err(err_decode_message_unsupported(version, "TopicProduceData"))?
         }
@@ -109,8 +107,8 @@ pub struct PartitionProduceData {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for PartitionProduceData {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for PartitionProduceData {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         if version > 9 {
             Err(err_decode_message_unsupported(
                 version,
@@ -119,7 +117,10 @@ impl Decodable for PartitionProduceData {
         }
         let mut this = PartitionProduceData {
             index: Int32.decode(buf)?,
-            records: NullableBytes(version >= 9).decode(buf)?.map(Records::new),
+            records: {
+                let bs: Option<bytes::BytesMut> = NullableBytes(version >= 9).decode(buf)?;
+                bs.map(Records::new)
+            },
             ..Default::default()
         };
         if version >= 9 {

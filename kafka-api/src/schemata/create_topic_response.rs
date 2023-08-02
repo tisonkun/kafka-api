@@ -46,8 +46,8 @@ pub struct CreateTopicsResponse {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for CreateTopicsResponse {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for CreateTopicsResponse {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 2 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -81,8 +81,8 @@ pub struct CreatableTopicResult {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for CreatableTopicResult {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for CreatableTopicResult {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         NullableString(version >= 5).encode(buf, self.name.as_str())?;
         if version >= 7 {
             Uuid.encode(buf, self.topic_id)?;
@@ -97,15 +97,12 @@ impl Encodable for CreatableTopicResult {
             NullableArray(Struct(version), true).encode(buf, self.configs.as_slice())?;
         }
         if version >= 5 {
-            let mut unknown_tagged_fields = vec![];
-            if self.topic_config_error_code != 0 {
-                unknown_tagged_fields.push(RawTaggedField {
-                    tag: 0,
-                    data: Int16.encode_alloc(self.topic_config_error_code)?,
-                })
-            }
-            unknown_tagged_fields.append(&mut self.unknown_tagged_fields.clone());
-            RawTaggedFieldList.encode(buf, &unknown_tagged_fields)?;
+            RawTaggedFieldList.encode_with(buf, 1, &self.unknown_tagged_fields, |buf| {
+                VarInt.encode(buf, 0)?;
+                VarInt.encode(buf, Int16.size(self.topic_config_error_code) as i32)?;
+                Int16.encode(buf, self.topic_config_error_code)?;
+                Ok(())
+            })?;
         }
         Ok(())
     }
@@ -127,8 +124,8 @@ pub struct CreatableTopicConfigs {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for CreatableTopicConfigs {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for CreatableTopicConfigs {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 5 {
             Err(err_encode_message_unsupported(
                 version,

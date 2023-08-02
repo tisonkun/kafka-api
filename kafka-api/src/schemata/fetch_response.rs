@@ -62,8 +62,8 @@ pub struct FetchResponse {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for FetchResponse {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for FetchResponse {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 1 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -91,8 +91,8 @@ pub struct FetchableTopicResponse {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for FetchableTopicResponse {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for FetchableTopicResponse {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version <= 12 {
             NullableString(version >= 12).encode(buf, self.topic.as_str())?;
         }
@@ -158,8 +158,8 @@ impl Default for PartitionData {
     }
 }
 
-impl Encodable for PartitionData {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for PartitionData {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int32.encode(buf, self.partition_index)?;
         Int16.encode(buf, self.error_code)?;
         Int64.encode(buf, self.high_watermark)?;
@@ -176,29 +176,29 @@ impl Encodable for PartitionData {
         if version >= 11 {
             Int32.encode(buf, self.preferred_read_replica)?;
         }
-        NullableBytes(version >= 12).encode(buf, self.records.as_slice())?;
+        NullableBytes(version >= 12).encode(buf, self.records.as_bytes())?;
         if version >= 12 {
-            let mut unknown_tagged_fields = vec![];
-            if let Some(diverging_epoch) = &self.diverging_epoch {
-                unknown_tagged_fields.push(RawTaggedField {
-                    tag: 0,
-                    data: Struct(version).encode_alloc(diverging_epoch)?,
-                })
-            }
-            if let Some(current_leader) = &self.current_leader {
-                unknown_tagged_fields.push(RawTaggedField {
-                    tag: 1,
-                    data: Struct(version).encode_alloc(current_leader)?,
-                })
-            }
-            if let Some(snapshot_id) = &self.snapshot_id {
-                unknown_tagged_fields.push(RawTaggedField {
-                    tag: 2,
-                    data: Struct(version).encode_alloc(snapshot_id)?,
-                })
-            }
-            unknown_tagged_fields.append(&mut self.unknown_tagged_fields.clone());
-            RawTaggedFieldList.encode(buf, &unknown_tagged_fields)?;
+            let mut n = self.diverging_epoch.is_some() as usize;
+            n += self.current_leader.is_some() as usize;
+            n += self.snapshot_id.is_some() as usize;
+            RawTaggedFieldList.encode_with(buf, n, &self.unknown_tagged_fields, |buf| {
+                if let Some(diverging_epoch) = &self.diverging_epoch {
+                    VarInt.encode(buf, 0)?;
+                    VarInt.encode(buf, Struct(version).size(diverging_epoch) as i32)?;
+                    Struct(version).encode(buf, diverging_epoch)?;
+                }
+                if let Some(current_leader) = &self.current_leader {
+                    VarInt.encode(buf, 1)?;
+                    VarInt.encode(buf, Struct(version).size(current_leader) as i32)?;
+                    Struct(version).encode(buf, current_leader)?;
+                }
+                if let Some(snapshot_id) = &self.snapshot_id {
+                    VarInt.encode(buf, 2)?;
+                    VarInt.encode(buf, Struct(version).size(snapshot_id) as i32)?;
+                    Struct(version).encode(buf, snapshot_id)?;
+                }
+                Ok(())
+            })?;
         }
         Ok(())
     }
@@ -222,8 +222,8 @@ impl Default for EpochEndOffset {
     }
 }
 
-impl Encodable for EpochEndOffset {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for EpochEndOffset {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 12 {
             Err(err_encode_message_unsupported(version, "EpochEndOffset"))?
         }
@@ -254,8 +254,8 @@ impl Default for LeaderIdAndEpoch {
     }
 }
 
-impl Encodable for LeaderIdAndEpoch {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for LeaderIdAndEpoch {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 12 {
             Err(err_encode_message_unsupported(version, "LeaderIdAndEpoch"))?
         }
@@ -284,8 +284,8 @@ impl Default for SnapshotId {
     }
 }
 
-impl Encodable for SnapshotId {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for SnapshotId {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 12 {
             Err(err_encode_message_unsupported(version, "SnapshotId"))?
         }
@@ -306,8 +306,8 @@ pub struct AbortedTransaction {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for AbortedTransaction {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for AbortedTransaction {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 4 {
             Err(err_encode_message_unsupported(
                 version,

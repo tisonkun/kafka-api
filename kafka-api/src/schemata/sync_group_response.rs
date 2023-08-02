@@ -47,8 +47,8 @@ pub struct SyncGroupResponse {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for SyncGroupResponse {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for SyncGroupResponse {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 1 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }

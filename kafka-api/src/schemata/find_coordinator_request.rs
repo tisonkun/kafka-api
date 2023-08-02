@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::Buf;
-
 use crate::{codec::*, err_decode_message_null};
 
 // Version 1 adds KeyType.
@@ -38,8 +36,8 @@ pub struct FindCoordinatorRequest {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for FindCoordinatorRequest {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for FindCoordinatorRequest {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         let mut this = FindCoordinatorRequest::default();
         if version <= 3 {
             this.key = NullableString(version >= 3)

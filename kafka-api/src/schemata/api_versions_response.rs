@@ -52,43 +52,36 @@ pub struct ApiVersionsResponse {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for ApiVersionsResponse {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for ApiVersionsResponse {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int16.encode(buf, self.error_code)?;
         NullableArray(Struct(version), version >= 3).encode(buf, self.api_keys.as_slice())?;
         if version >= 1 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
         if version >= 3 {
-            let mut unknown_tagged_fields = vec![];
-            if !self.supported_features.is_empty() {
-                unknown_tagged_fields.push(RawTaggedField {
-                    tag: 0,
-                    data: NullableArray(Struct(version), version >= 3)
-                        .encode_alloc(self.finalized_features.as_slice())?,
-                })
-            }
-            if self.finalized_features_epoch != -1 {
-                unknown_tagged_fields.push(RawTaggedField {
-                    tag: 1,
-                    data: Int64.encode_alloc(self.finalized_features_epoch)?,
-                })
-            }
-            if !self.finalized_features.is_empty() {
-                unknown_tagged_fields.push(RawTaggedField {
-                    tag: 2,
-                    data: NullableArray(Struct(version), version >= 3)
-                        .encode_alloc(self.finalized_features.as_slice())?,
-                })
-            }
-            if self.zk_migration_ready {
-                unknown_tagged_fields.push(RawTaggedField {
-                    tag: 3,
-                    data: Bool.encode_alloc(self.zk_migration_ready)?,
-                })
-            }
-            unknown_tagged_fields.append(&mut self.unknown_tagged_fields.clone());
-            RawTaggedFieldList.encode(buf, &unknown_tagged_fields)?;
+            RawTaggedFieldList.encode_with(buf, 3, &self.unknown_tagged_fields, |buf| {
+                VarInt.encode(buf, 0)?;
+                VarInt.encode(
+                    buf,
+                    NullableArray(Struct(version), version >= 3)
+                        .size(self.supported_features.as_slice()) as i32,
+                )?;
+                NullableArray(Struct(version), version >= 3)
+                    .encode(buf, self.supported_features.as_slice())?;
+                VarInt.encode(buf, 1)?;
+                VarInt.encode(buf, Int64.size(self.finalized_features_epoch) as i32)?;
+                Int64.encode(buf, self.finalized_features_epoch)?;
+                VarInt.encode(buf, 2)?;
+                VarInt.encode(
+                    buf,
+                    NullableArray(Struct(version), version >= 3)
+                        .size(self.finalized_features.as_slice()) as i32,
+                )?;
+                NullableArray(Struct(version), version >= 3)
+                    .encode(buf, self.finalized_features.as_slice())?;
+                Ok(())
+            })?;
         }
         Ok(())
     }
@@ -106,8 +99,8 @@ pub struct ApiVersion {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for ApiVersion {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for ApiVersion {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int16.encode(buf, self.api_key)?;
         Int16.encode(buf, self.min_version)?;
         Int16.encode(buf, self.max_version)?;
@@ -130,8 +123,8 @@ pub struct SupportedFeatureKey {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for SupportedFeatureKey {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for SupportedFeatureKey {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version > 3 {
             Err(err_encode_message_unsupported(
                 version,
@@ -158,8 +151,8 @@ pub struct FinalizedFeatureKey {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for FinalizedFeatureKey {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for FinalizedFeatureKey {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version > 3 {
             Err(err_encode_message_unsupported(
                 version,

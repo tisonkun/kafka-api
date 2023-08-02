@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::Buf;
-
 use crate::{codec::*, err_decode_message_null, err_decode_message_unsupported};
 
 // In version 0, an empty array indicates "request metadata for all topics."  In version 1 and
@@ -54,8 +52,8 @@ pub struct MetadataRequest {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for MetadataRequest {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for MetadataRequest {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         let mut this = MetadataRequest {
             topics: NullableArray(Struct(version), version >= 9)
                 .decode(buf)?
@@ -91,8 +89,8 @@ pub struct MetadataRequestTopic {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for MetadataRequestTopic {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for MetadataRequestTopic {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         if version > 12 {
             Err(err_decode_message_unsupported(
                 version,

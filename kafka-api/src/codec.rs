@@ -21,26 +21,40 @@ use crate::{
     record::{Header, Record},
 };
 
+pub trait Readable: Buf {
+    fn copy_to_bytes_mut(&mut self, len: usize) -> bytes::BytesMut {
+        bytes::BytesMut::from_iter(Vec::from(self.copy_to_bytes(len)))
+    }
+}
+
+impl<T: AsRef<[u8]>> Readable for io::Cursor<T> {}
+impl Readable for bytes::Bytes {}
+impl Readable for bytes::BytesMut {
+    fn copy_to_bytes_mut(&mut self, len: usize) -> bytes::BytesMut {
+        self.split_to(len)
+    }
+}
+
 pub trait Decoder<T: Sized> {
-    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<T>;
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<T>;
 }
 
 pub trait Encoder<T> {
     fn encode<B: BufMut>(&self, buf: &mut B, value: T) -> io::Result<()>;
 
-    fn encode_alloc(&self, value: T) -> io::Result<bytes::Bytes> {
-        let mut bs = bytes::BytesMut::new();
-        self.encode(&mut bs, value)?;
-        Ok(bs.freeze())
+    fn size(&self, value: T) -> usize;
+}
+
+pub trait Deserializable: Sized {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self>;
+}
+
+pub trait Serializable: Sized {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()>;
+
+    fn size(&self, _version: i16) -> usize {
+        todo!("calculate size for responses")
     }
-}
-
-pub trait Decodable: Sized {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self>;
-}
-
-pub trait Encodable: Sized {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()>;
 }
 
 #[derive(Debug, Default, Clone)]
@@ -52,7 +66,7 @@ pub struct RawTaggedField {
 pub(super) struct RawTaggedFieldList;
 
 impl RawTaggedFieldList {
-    pub(super) fn decode_with<B: Buf, F>(
+    pub(super) fn decode_with<B: Readable, F>(
         &self,
         buf: &mut B,
         mut f: F,
@@ -73,17 +87,19 @@ impl RawTaggedFieldList {
         }
         Ok(res)
     }
-}
 
-impl Decoder<Vec<RawTaggedField>> for RawTaggedFieldList {
-    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<Vec<RawTaggedField>> {
-        RawTaggedFieldList.decode_with(buf, |_, _, _| Ok(false))
-    }
-}
-
-impl Encoder<&[RawTaggedField]> for RawTaggedFieldList {
-    fn encode<B: BufMut>(&self, buf: &mut B, fields: &[RawTaggedField]) -> io::Result<()> {
-        VarInt.encode(buf, fields.len() as i32)?;
+    pub(super) fn encode_with<B: BufMut, F>(
+        &self,
+        buf: &mut B,
+        n: usize, // extra fields
+        fields: &[RawTaggedField],
+        mut f: F,
+    ) -> io::Result<()>
+    where
+        F: FnMut(&mut B) -> io::Result<()>,
+    {
+        VarInt.encode(buf, (fields.len() + n) as i32)?;
+        f(buf)?;
         for field in fields {
             VarInt.encode(buf, field.tag)?;
             VarInt.encode(buf, field.data.len() as i32)?;
@@ -93,13 +109,36 @@ impl Encoder<&[RawTaggedField]> for RawTaggedFieldList {
     }
 }
 
+impl Decoder<Vec<RawTaggedField>> for RawTaggedFieldList {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Vec<RawTaggedField>> {
+        RawTaggedFieldList.decode_with(buf, |_, _, _| Ok(false))
+    }
+}
+
+impl Encoder<&[RawTaggedField]> for RawTaggedFieldList {
+    fn encode<B: BufMut>(&self, buf: &mut B, fields: &[RawTaggedField]) -> io::Result<()> {
+        self.encode_with(buf, 0, fields, |_| Ok(()))
+    }
+
+    fn size(&self, fields: &[RawTaggedField]) -> usize {
+        let mut res = 0;
+        res += VarInt.size(fields.len() as i32);
+        for field in fields {
+            res += VarInt.size(field.tag);
+            res += VarInt.size(field.data.len() as i32);
+            res += field.data.len();
+        }
+        res
+    }
+}
+
 macro_rules! define_ints_codec {
     ($name:ident, $ty:ty, $put:ident, $get:ident) => {
         #[derive(Debug, Copy, Clone)]
         pub(super) struct $name;
 
         impl Decoder<$ty> for $name {
-            fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<$ty> {
+            fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<$ty> {
                 if buf.remaining() >= size_of::<$ty>() {
                     Ok(buf.$get())
                 } else {
@@ -115,6 +154,11 @@ macro_rules! define_ints_codec {
             fn encode<B: BufMut>(&self, buf: &mut B, value: $ty) -> io::Result<()> {
                 self.encode(buf, &value)
             }
+
+            #[inline]
+            fn size(&self, _: $ty) -> usize {
+                size_of::<$ty>()
+            }
         }
 
         impl Encoder<&$ty> for $name {
@@ -128,6 +172,11 @@ macro_rules! define_ints_codec {
                         buf.remaining_mut()
                     )))
                 }
+            }
+
+            #[inline]
+            fn size(&self, _: &$ty) -> usize {
+                size_of::<$ty>()
             }
         }
     };
@@ -148,7 +197,7 @@ define_ints_codec!(Float64, f64, put_f64, get_f64);
 pub(super) struct Bool;
 
 impl Decoder<bool> for Bool {
-    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<bool> {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<bool> {
         if buf.remaining() >= size_of::<u8>() {
             Ok(buf.get_u8() != 0)
         } else {
@@ -172,13 +221,17 @@ impl Encoder<bool> for Bool {
             )))
         }
     }
+
+    fn size(&self, _: bool) -> usize {
+        size_of::<bool>()
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
 pub(super) struct VarInt;
 
 impl Decoder<i32> for VarInt {
-    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<i32> {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<i32> {
         let mut res = 0;
         for i in 0.. {
             debug_assert!(i < 5); // no larger than i32
@@ -209,13 +262,24 @@ impl Encoder<i32> for VarInt {
         buf.put_u8(v as u8);
         Ok(())
     }
+
+    fn size(&self, value: i32) -> usize {
+        let mut res = 1;
+        let mut v = value;
+        while v >= 0x80 {
+            res += 1;
+            v >>= 7;
+        }
+        debug_assert!(v <= 5);
+        res
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
 pub(super) struct VarLong;
 
 impl Decoder<i64> for VarLong {
-    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<i64> {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<i64> {
         let mut res = 0;
         for i in 0.. {
             debug_assert!(i < 10); // no larger than i64
@@ -246,13 +310,24 @@ impl Encoder<i64> for VarLong {
         buf.put_u8(v as u8);
         Ok(())
     }
+
+    fn size(&self, value: i64) -> usize {
+        let mut res = 1;
+        let mut v = value;
+        while v >= 0x80 {
+            res += 1;
+            v >>= 7;
+        }
+        debug_assert!(v <= 10);
+        res
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
 pub(super) struct NullableString(pub bool /* flexible */);
 
 impl Decoder<Option<String>> for NullableString {
-    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<Option<String>> {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Option<String>> {
         let len = if self.0 {
             VarInt.decode(buf)? - 1
         } else {
@@ -273,19 +348,38 @@ impl Encoder<Option<&str>> for NullableString {
     fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&str>) -> io::Result<()> {
         write_slice(buf, value.map(|s| s.as_bytes()), self.0)
     }
+
+    fn size(&self, value: Option<&str>) -> usize {
+        slice_size(value.map(|s| s.as_bytes()), self.0)
+    }
 }
 
 impl Encoder<&str> for NullableString {
     fn encode<B: BufMut>(&self, buf: &mut B, value: &str) -> io::Result<()> {
         write_slice(buf, Some(value.as_bytes()), self.0)
     }
+
+    fn size(&self, value: &str) -> usize {
+        slice_size(Some(value.as_bytes()), self.0)
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
 pub(super) struct NullableBytes(pub bool /* flexible */);
 
+impl Decoder<Option<bytes::BytesMut>> for NullableBytes {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Option<bytes::BytesMut>> {
+        let len = if self.0 {
+            VarInt.decode(buf)? - 1
+        } else {
+            Int16.decode(buf)? as i32
+        };
+        read_nullable_bytes_mut(buf, len, "bytes")
+    }
+}
+
 impl Decoder<Option<bytes::Bytes>> for NullableBytes {
-    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<Option<bytes::Bytes>> {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Option<bytes::Bytes>> {
         let len = if self.0 {
             VarInt.decode(buf)? - 1
         } else {
@@ -299,17 +393,53 @@ impl Encoder<Option<&bytes::Bytes>> for NullableBytes {
     fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&bytes::Bytes>) -> io::Result<()> {
         write_slice(buf, value.map(|bs| bs.as_ref()), self.0)
     }
+
+    fn size(&self, value: Option<&bytes::Bytes>) -> usize {
+        slice_size(value.map(|bs| bs.as_ref()), self.0)
+    }
 }
 
 impl Encoder<&bytes::Bytes> for NullableBytes {
     fn encode<B: BufMut>(&self, buf: &mut B, value: &bytes::Bytes) -> io::Result<()> {
         write_slice(buf, Some(value.as_ref()), self.0)
     }
+
+    fn size(&self, value: &bytes::Bytes) -> usize {
+        slice_size(Some(value.as_ref()), self.0)
+    }
+}
+
+impl Encoder<Option<&[u8]>> for NullableBytes {
+    fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&[u8]>) -> io::Result<()> {
+        write_slice(buf, value, self.0)
+    }
+
+    fn size(&self, value: Option<&[u8]>) -> usize {
+        slice_size(value, self.0)
+    }
 }
 
 impl Encoder<&[u8]> for NullableBytes {
     fn encode<B: BufMut>(&self, buf: &mut B, value: &[u8]) -> io::Result<()> {
         write_slice(buf, Some(value), self.0)
+    }
+
+    fn size(&self, value: &[u8]) -> usize {
+        slice_size(Some(value), self.0)
+    }
+}
+
+fn slice_size(slice: Option<&[u8]>, flexible: bool) -> usize {
+    match slice {
+        None => 1,
+        Some(bs) => {
+            let len = bs.len();
+            len + if flexible {
+                VarInt.size(len as i32 + 1)
+            } else {
+                Int16.size(len as i16)
+            }
+        }
     }
 }
 
@@ -335,7 +465,32 @@ fn write_slice<B: BufMut>(buf: &mut B, slice: Option<&[u8]>, flexible: bool) -> 
     Ok(())
 }
 
-fn read_nullable_bytes<B: Buf>(
+fn read_nullable_bytes_mut<B: Readable>(
+    buf: &mut B,
+    len: i32,
+    ty: &str,
+) -> io::Result<Option<bytes::BytesMut>> {
+    match len {
+        -1 => Ok(None),
+        n if n >= 0 => {
+            let n = n as usize;
+            let bs = if buf.remaining() >= n {
+                Ok(buf.copy_to_bytes_mut(n))
+            } else {
+                Err(err_codec_message(format!(
+                    "no enough {n} bytes when decode {ty:?} (remaining: {})",
+                    buf.remaining()
+                )))
+            }?;
+            Ok(Some(bs))
+        }
+        n => Err(err_codec_message(format!(
+            "illegal length {n} when decode {ty}"
+        ))),
+    }
+}
+
+fn read_nullable_bytes<B: Readable>(
     buf: &mut B,
     len: i32,
     ty: &str,
@@ -353,7 +508,7 @@ fn read_nullable_bytes<B: Buf>(
     }
 }
 
-fn read_exact_bytes_of<B: Buf>(buf: &mut B, n: usize, ty: &str) -> io::Result<bytes::Bytes> {
+fn read_exact_bytes_of<B: Readable>(buf: &mut B, n: usize, ty: &str) -> io::Result<bytes::Bytes> {
     if buf.remaining() >= n {
         Ok(buf.copy_to_bytes(n))
     } else {
@@ -368,7 +523,7 @@ fn read_exact_bytes_of<B: Buf>(buf: &mut B, n: usize, ty: &str) -> io::Result<by
 pub(super) struct NullableArray<E>(pub E, pub bool /* flexible */);
 
 impl<T, E: Decoder<T>> Decoder<Option<Vec<T>>> for NullableArray<E> {
-    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<Option<Vec<T>>> {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Option<Vec<T>>> {
         let len = if self.1 {
             VarInt.decode(buf)? - 1
         } else {
@@ -404,6 +559,24 @@ impl<T, E: for<'a> Encoder<&'a T>> Encoder<Option<&[T]>> for NullableArray<E> {
             Some(s) => self.encode(buf, s),
         }
     }
+
+    fn size(&self, value: Option<&[T]>) -> usize {
+        match value {
+            None => 1,
+            Some(ns) => {
+                let mut res = 0;
+                res += if self.1 {
+                    VarInt.size(ns.len() as i32 + 1)
+                } else {
+                    Int32.size(ns.len() as i32)
+                };
+                for n in ns {
+                    res += self.0.size(n);
+                }
+                res
+            }
+        }
+    }
 }
 
 impl<T, E: for<'a> Encoder<&'a T>> Encoder<&[T]> for NullableArray<E> {
@@ -418,20 +591,28 @@ impl<T, E: for<'a> Encoder<&'a T>> Encoder<&[T]> for NullableArray<E> {
         }
         Ok(())
     }
+
+    fn size(&self, value: &[T]) -> usize {
+        self.size(Some(value))
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
 pub(super) struct Struct(pub i16 /* version */);
 
-impl<T: Decodable> Decoder<T> for Struct {
-    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<T> {
-        T::decode(buf, self.0)
+impl<T: Deserializable> Decoder<T> for Struct {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<T> {
+        T::read(buf, self.0)
     }
 }
 
-impl<T: Encodable> Encoder<&T> for Struct {
+impl<T: Serializable> Encoder<&T> for Struct {
     fn encode<B: BufMut>(&self, buf: &mut B, value: &T) -> io::Result<()> {
-        value.encode(buf, self.0)
+        value.write(buf, self.0)
+    }
+
+    fn size(&self, value: &T) -> usize {
+        value.size(self.0)
     }
 }
 
@@ -439,7 +620,7 @@ impl<T: Encodable> Encoder<&T> for Struct {
 pub(super) struct Uuid;
 
 impl Decoder<uuid::Uuid> for Uuid {
-    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<uuid::Uuid> {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<uuid::Uuid> {
         let bs = read_exact_bytes_of(buf, 16, "uuid")?;
         let uuid = uuid::Uuid::from_slice(bs.as_ref()).map_err(err_io_other)?;
         Ok(uuid)
@@ -458,6 +639,10 @@ impl Encoder<uuid::Uuid> for Uuid {
             )))
         }
     }
+
+    fn size(&self, _: uuid::Uuid) -> usize {
+        16
+    }
 }
 
 fn varint_zigzag(i: i32) -> i32 {
@@ -472,7 +657,7 @@ fn varlong_zigzag(i: i64) -> i64 {
 pub(super) struct RecordList;
 
 impl Decoder<Vec<Record>> for RecordList {
-    fn decode<B: Buf>(&self, buf: &mut B) -> io::Result<Vec<Record>> {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Vec<Record>> {
         let cnt = Int32.decode(buf)?;
         let mut records = vec![];
         for _ in 0..cnt {

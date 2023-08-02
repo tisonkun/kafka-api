@@ -18,6 +18,7 @@ use std::{
     sync::atomic::{AtomicI64, Ordering},
 };
 
+use bytes::BytesMut;
 use kafka_api::{
     api_versions_request::ApiVersionsRequest,
     api_versions_response::{ApiVersion, ApiVersionsResponse},
@@ -576,12 +577,16 @@ impl Broker {
                     .get(&(topic_id, idx))
                     .expect("partition not found");
                 let committed_index = partition.0;
+                let mut records = BytesMut::new();
+                for record in partition.1.iter() {
+                    record.copy_write_to(&mut records);
+                }
                 partitions.push(PartitionData {
                     partition_index: idx,
                     high_watermark: committed_index,
                     last_stable_offset: committed_index,
                     log_start_offset: 0,
-                    records: Records::from_batches(partition.1.clone()),
+                    records: Records::new(records),
                     ..Default::default()
                 });
             }

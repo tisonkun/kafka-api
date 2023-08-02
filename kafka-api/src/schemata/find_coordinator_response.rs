@@ -47,8 +47,8 @@ pub struct FindCoordinatorResponse {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for FindCoordinatorResponse {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for FindCoordinatorResponse {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 1 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -95,8 +95,8 @@ pub struct Coordinator {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for Coordinator {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for Coordinator {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version > 4 {
             Err(err_encode_message_unsupported(version, "Coordinator"))?
         }

@@ -28,8 +28,8 @@ pub struct ResponseHeader {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for ResponseHeader {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for ResponseHeader {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int32.encode(buf, self.correlation_id)?;
         if version >= 1 {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;

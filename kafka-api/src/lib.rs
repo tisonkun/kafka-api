@@ -16,7 +16,7 @@
 
 use std::{fmt::Display, io};
 
-pub use codec::{Decodable, Encodable, RawTaggedField};
+pub use codec::{Deserializable, RawTaggedField, Serializable};
 pub use schemata::*;
 
 pub mod apikey;

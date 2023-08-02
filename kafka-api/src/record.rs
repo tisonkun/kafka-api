@@ -15,7 +15,6 @@
 use std::{
     fmt::{Debug, Formatter},
     io,
-    io::Cursor,
 };
 
 use bytes::{Buf, BufMut};
@@ -59,38 +58,20 @@ pub const LOG_OVERHEAD: usize = LENGTH_OFFSET + LENGTH_LENGTH;
 
 #[derive(Debug, Default, Clone)]
 pub struct Records {
-    buf: bytes::BytesMut,
+    bs: bytes::BytesMut,
 }
 
 impl Records {
-    pub fn new(bs: bytes::Bytes) -> Self {
-        Records {
-            // 1. Bytes to Vec with a PROMOTABLE_{ODD|EVEN}_VTABLE should be zero-copy.
-            // 2. Vec to Vec with IntoIter identically should be zero-copy.
-            // 3. BytesMut from Vec should be zero-copy.
-            buf: bytes::BytesMut::from_iter(Vec::from(bs)),
-        }
+    pub fn new(bs: bytes::BytesMut) -> Self {
+        Records { bs }
     }
 
-    pub fn as_slice(&self) -> &[u8] {
-        self.buf.as_ref()
-    }
-
-    pub fn from_batches(batches: Vec<RecordBatch>) -> Self {
-        let mut buf = bytes::BytesMut::new();
-        for batch in batches {
-            buf.extend(batch.buf);
-        }
-        Records { buf }
-    }
-
-    pub fn take_batches(&mut self) -> io::Result<Vec<RecordBatch>> {
-        let buf = self.buf.split();
-        decode_batches(buf)
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bs[..]
     }
 
     pub fn into_batches(self) -> io::Result<Vec<RecordBatch>> {
-        decode_batches(self.buf)
+        decode_batches(self.bs)
     }
 }
 
@@ -115,8 +96,9 @@ fn decode_batches(mut buf: bytes::BytesMut) -> io::Result<Vec<RecordBatch>> {
 
         let record = match (&buf[MAGIC_OFFSET..]).get_i8() {
             2 => {
-                let buf = buf.split_to(batch_size);
-                RecordBatch { buf }
+                let mut meta = buf.split_to(batch_size);
+                let records = meta.split_off(RECORDS_COUNT_OFFSET).freeze();
+                RecordBatch { meta, records }
             }
             v => unimplemented!("record batch version {}", v),
         };
@@ -126,9 +108,12 @@ fn decode_batches(mut buf: bytes::BytesMut) -> io::Result<Vec<RecordBatch>> {
     Ok(records)
 }
 
+// meta - all overhead until RECORD_COUNT (exclusive)
+// records - RECORD_COUNT and all records
 #[derive(Default, Clone)]
 pub struct RecordBatch {
-    buf: bytes::BytesMut,
+    meta: bytes::BytesMut,
+    records: bytes::Bytes,
 }
 
 impl Debug for RecordBatch {
@@ -137,33 +122,39 @@ impl Debug for RecordBatch {
         de.field("base_offset", &self.base_offset());
         de.field("last_offset_delta", &self.last_offset_delta());
         de.field("records_count", &self.records_count());
-        // ATTENTION - this can be time consuming
         de.field("records", &self.records());
         de.finish()
     }
 }
 
 impl RecordBatch {
+    pub fn copy_write_to<B: BufMut>(&self, buf: &mut B) {
+        buf.put_slice(&self.meta);
+        buf.put_slice(&self.records);
+    }
+
     pub fn set_last_offset(&mut self, offset: i64) {
         let base_offset = offset - self.last_offset_delta() as i64;
-        (&mut self.buf[BASE_OFFSET_OFFSET..]).put_i64(base_offset);
+        (&mut self.meta[BASE_OFFSET_OFFSET..]).put_i64(base_offset);
     }
 
     pub fn base_offset(&self) -> i64 {
-        (&self.buf[BASE_OFFSET_OFFSET..]).get_i64()
+        (&self.meta[BASE_OFFSET_OFFSET..]).get_i64()
     }
 
     pub fn last_offset_delta(&self) -> i32 {
-        (&self.buf[LAST_OFFSET_DELTA_OFFSET..]).get_i32()
+        (&self.meta[LAST_OFFSET_DELTA_OFFSET..]).get_i32()
     }
 
     pub fn records_count(&self) -> i32 {
-        (&self.buf[RECORDS_COUNT_OFFSET..]).get_i32()
+        (&self.records[..]).get_i32()
     }
 
     pub fn records(&self) -> Vec<Record> {
-        let mut cursor = Cursor::new(&self.buf[RECORDS_COUNT_OFFSET..]);
-        RecordList.decode(&mut cursor).expect("malformed records")
+        // Shallow clone. The internal copy_to_bytes calls that construct record key and value
+        // are also zero-copy.
+        let mut records = self.records.clone();
+        RecordList.decode(&mut records).expect("malformed records")
     }
 }
 
@@ -223,9 +214,7 @@ mod tests {
 
     #[test]
     fn test_codec_records() -> io::Result<()> {
-        let records = Records {
-            buf: bytes::BytesMut::from(RECORD),
-        };
+        let records = Records::new(bytes::BytesMut::from(RECORD));
         let record_batches = records.into_batches()?;
         assert_eq!(record_batches.len(), 1);
         let record_batch = &record_batches[0];

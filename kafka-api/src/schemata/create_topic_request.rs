@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::Buf;
-
 use crate::{codec::*, err_decode_message_null};
 
 // Version 1 adds validateOnly.
@@ -43,8 +41,8 @@ pub struct CreateTopicsRequest {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for CreateTopicsRequest {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for CreateTopicsRequest {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         let mut res = CreateTopicsRequest {
             topics: NullableArray(Struct(version), version >= 5)
                 .decode(buf)?
@@ -80,8 +78,8 @@ pub struct CreatableTopic {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for CreatableTopic {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for CreatableTopic {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         let mut res = CreatableTopic {
             name: NullableString(version >= 5)
                 .decode(buf)?
@@ -113,8 +111,8 @@ pub struct CreatableTopicConfig {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for CreatableTopicConfig {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for CreatableTopicConfig {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         let mut res = CreatableTopicConfig {
             name: NullableString(version >= 5)
                 .decode(buf)?
@@ -139,8 +137,8 @@ pub struct CreatableReplicaAssignment {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for CreatableReplicaAssignment {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for CreatableReplicaAssignment {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         let mut res = CreatableReplicaAssignment {
             partition_index: Int32.decode(buf)?,
             ..Default::default()

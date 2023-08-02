@@ -45,8 +45,8 @@ pub struct ProduceResponse {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for ProduceResponse {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for ProduceResponse {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         NullableArray(Struct(version), version >= 9).encode(buf, self.responses.as_slice())?;
         if version > 1 {
             Int32.encode(buf, self.throttle_time_ms)?;
@@ -68,8 +68,8 @@ pub struct TopicProduceResponse {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for TopicProduceResponse {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for TopicProduceResponse {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         NullableString(version >= 9).encode(buf, self.name.as_str())?;
         NullableArray(Struct(version), version >= 9)
             .encode(buf, self.partition_responses.as_slice())?;
@@ -103,8 +103,8 @@ pub struct PartitionProduceResponse {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for PartitionProduceResponse {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for PartitionProduceResponse {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int32.encode(buf, self.index)?;
         Int16.encode(buf, self.error_code)?;
         Int64.encode(buf, self.base_offset)?;
@@ -138,8 +138,8 @@ pub struct BatchIndexAndErrorMessage {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for BatchIndexAndErrorMessage {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for BatchIndexAndErrorMessage {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 8 {
             Err(err_encode_message_unsupported(
                 version,

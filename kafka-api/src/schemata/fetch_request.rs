@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::Buf;
-
 use crate::{codec::*, err_decode_message_null, err_decode_message_unsupported};
 
 // Version 1 is the same as version 0.
@@ -89,8 +87,8 @@ pub struct FetchRequest {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for FetchRequest {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for FetchRequest {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         let mut this = FetchRequest {
             replica_id: -1,
             max_bytes: i32::MAX,
@@ -136,7 +134,7 @@ impl Decodable for FetchRequest {
                     }
                     1 => {
                         if version >= 15 {
-                            this.replica_state = ReplicaState::decode(buf, version)?;
+                            this.replica_state = ReplicaState::read(buf, version)?;
                         }
                         Ok(true)
                     }
@@ -157,8 +155,8 @@ pub struct ReplicaState {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for ReplicaState {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for ReplicaState {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         if version > 15 {
             Err(err_decode_message_unsupported(version, "ReplicaState"))?
         }
@@ -183,8 +181,8 @@ pub struct FetchTopic {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for FetchTopic {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for FetchTopic {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         if version > 15 {
             Err(err_decode_message_unsupported(version, "FetchTopic"))?
         }
@@ -229,8 +227,8 @@ pub struct FetchPartition {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for FetchPartition {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for FetchPartition {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         if version > 15 {
             Err(err_decode_message_unsupported(version, "FetchPartition"))?
         }
@@ -266,8 +264,8 @@ pub struct ForgottenTopic {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for ForgottenTopic {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for ForgottenTopic {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         if version > 15 {
             Err(err_decode_message_unsupported(version, "ForgottenTopic"))?
         }

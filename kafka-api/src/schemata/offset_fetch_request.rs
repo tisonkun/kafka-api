@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::Buf;
-
 use crate::{codec::*, err_decode_message_null, err_decode_message_unsupported};
 
 // In version 0, the request read offsets from ZK.
@@ -50,8 +48,8 @@ pub struct OffsetFetchRequest {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for OffsetFetchRequest {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for OffsetFetchRequest {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         let mut this = OffsetFetchRequest::default();
         if version <= 7 {
             this.group_id = NullableString(version >= 6)
@@ -87,8 +85,8 @@ pub struct OffsetFetchRequestTopic {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for OffsetFetchRequestTopic {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for OffsetFetchRequestTopic {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         let mut this = OffsetFetchRequestTopic {
             name: NullableString(version >= 6)
                 .decode(buf)?
@@ -115,8 +113,8 @@ pub struct OffsetFetchRequestGroup {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for OffsetFetchRequestGroup {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for OffsetFetchRequestGroup {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         if version > 8 {
             Err(err_decode_message_unsupported(
                 version,

@@ -61,8 +61,8 @@ pub struct JoinGroupResponse {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for JoinGroupResponse {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for JoinGroupResponse {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 2 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -100,8 +100,8 @@ pub struct JoinGroupResponseMember {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Encodable for JoinGroupResponseMember {
-    fn encode<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+impl Serializable for JoinGroupResponseMember {
+    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         NullableString(version >= 6).encode(buf, self.member_id.as_str())?;
         if version >= 5 {
             NullableString(version >= 6).encode(buf, self.group_instance_id.as_deref())?;

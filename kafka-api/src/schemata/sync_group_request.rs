@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::Buf;
-
 use crate::{codec::*, err_decode_message_null, err_decode_message_unsupported};
 
 // Versions 1 and 2 are the same as version 0.
@@ -49,8 +47,8 @@ pub struct SyncGroupRequest {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for SyncGroupRequest {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for SyncGroupRequest {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         let mut this = SyncGroupRequest {
             group_id: NullableString(version >= 4)
                 .decode(buf)?
@@ -88,8 +86,8 @@ pub struct SyncGroupRequestAssignment {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for SyncGroupRequestAssignment {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for SyncGroupRequestAssignment {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         if version > 5 {
             Err(err_decode_message_unsupported(
                 version,
@@ -100,9 +98,10 @@ impl Decodable for SyncGroupRequestAssignment {
             member_id: NullableString(version >= 4)
                 .decode(buf)?
                 .ok_or_else(|| err_decode_message_null("member_id"))?,
-            assignment: NullableBytes(version >= 4)
-                .decode(buf)?
-                .ok_or_else(|| err_decode_message_null("assignment"))?,
+            assignment: {
+                let bs: Option<bytes::Bytes> = NullableBytes(version >= 4).decode(buf)?;
+                bs.ok_or_else(|| err_decode_message_null("assignment"))?
+            },
             ..Default::default()
         };
         if version >= 4 {

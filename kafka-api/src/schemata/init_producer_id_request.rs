@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::Buf;
-
 use crate::codec::*;
 
 // Version 1 is the same as version 0.
@@ -44,8 +42,8 @@ pub struct InitProducerIdRequest {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for InitProducerIdRequest {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for InitProducerIdRequest {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         let mut res = InitProducerIdRequest {
             transactional_id: NullableString(version >= 3).decode(buf)?,
             transaction_timeout_ms: Int32.decode(buf)?,

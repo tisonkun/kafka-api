@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::Buf;
-
 use crate::{codec::*, err_decode_message_null, err_decode_message_unsupported};
 
 // Version 1 adds RebalanceTimeoutMs.
@@ -59,8 +57,8 @@ pub struct JoinGroupRequest {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for JoinGroupRequest {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for JoinGroupRequest {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         let mut this = JoinGroupRequest {
             group_id: NullableString(version >= 6)
                 .decode(buf)?
@@ -101,8 +99,8 @@ pub struct JoinGroupRequestProtocol {
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
 
-impl Decodable for JoinGroupRequestProtocol {
-    fn decode<B: Buf>(buf: &mut B, version: i16) -> io::Result<Self> {
+impl Deserializable for JoinGroupRequestProtocol {
+    fn read<B: Readable>(buf: &mut B, version: i16) -> io::Result<Self> {
         if version > 9 {
             Err(err_decode_message_unsupported(
                 version,
@@ -113,9 +111,10 @@ impl Decodable for JoinGroupRequestProtocol {
             name: NullableString(version >= 6)
                 .decode(buf)?
                 .ok_or_else(|| err_decode_message_null("name"))?,
-            metadata: NullableBytes(version >= 6)
-                .decode(buf)?
-                .ok_or_else(|| err_decode_message_null("metadata"))?,
+            metadata: {
+                let bs: Option<bytes::Bytes> = NullableBytes(version >= 6).decode(buf)?;
+                bs.ok_or_else(|| err_decode_message_null("metadata"))?
+            },
             ..Default::default()
         };
         if version >= 6 {
