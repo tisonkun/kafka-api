@@ -59,91 +59,111 @@ pub const LOG_OVERHEAD: usize = LENGTH_OFFSET + LENGTH_LENGTH;
 
 #[derive(Debug, Default, Clone)]
 pub struct Records {
-    buf: Vec<u8>,
+    buf: bytes::BytesMut,
 }
 
 impl Records {
     pub fn new(bs: bytes::Bytes) -> Self {
-        // Bytes to Vec with a PROMOTABLE_{ODD|EVEN}_VTABLE should be zero-copy.
-        Records { buf: bs.into() }
+        Records {
+            // 1. Bytes to Vec with a PROMOTABLE_{ODD|EVEN}_VTABLE should be zero-copy.
+            // 2. Vec to Vec with IntoIter identically should be zero-copy.
+            // 3. BytesMut from Vec should be zero-copy.
+            buf: bytes::BytesMut::from_iter(Vec::from(bs)),
+        }
     }
 
     pub fn as_slice(&self) -> &[u8] {
-        self.buf.as_slice()
+        self.buf.as_ref()
     }
 
-    pub fn batches(&mut self) -> io::Result<Vec<RecordBatch<'_>>> {
-        let mut records = vec![];
-        let mut remaining = &mut self.buf[..];
-        while remaining.len() > 0 {
-            if remaining.len() < HEADER_SIZE_UP_TO_MAGIC {
-                Err(err_codec_message(format!(
-                    "no enough bytes when decode records (remaining: {})",
-                    remaining.len()
-                )))?
-            }
-
-            let record_size = (&remaining[LENGTH_OFFSET..]).get_i32();
-            let batch_size = record_size as usize + LOG_OVERHEAD;
-            if remaining.len() < batch_size {
-                Err(err_codec_message(format!(
-                    "no enough bytes when decode records (remaining: {})",
-                    remaining.len()
-                )))?
-            }
-
-            let record = match (&remaining[MAGIC_OFFSET..]).get_i8() {
-                2 => {
-                    let (a, b) = remaining.split_at_mut(batch_size);
-                    remaining = b;
-                    RecordBatch { buf: a }
-                }
-                v => unimplemented!("record batch version {}", v),
-            };
-
-            records.push(record);
+    pub fn from_batches(batches: Vec<RecordBatch>) -> Self {
+        let mut buf = bytes::BytesMut::new();
+        for batch in batches {
+            buf.extend(batch.buf);
         }
-        Ok(records)
+        Records { buf }
+    }
+
+    pub fn take_batches(&mut self) -> io::Result<Vec<RecordBatch>> {
+        let buf = self.buf.split();
+        decode_batches(buf)
+    }
+
+    pub fn into_batches(self) -> io::Result<Vec<RecordBatch>> {
+        decode_batches(self.buf)
     }
 }
 
-pub struct RecordBatch<'a> {
-    buf: &'a mut [u8],
+fn decode_batches(mut buf: bytes::BytesMut) -> io::Result<Vec<RecordBatch>> {
+    let mut records = vec![];
+    while buf.remaining() > 0 {
+        if buf.remaining() < HEADER_SIZE_UP_TO_MAGIC {
+            Err(err_codec_message(format!(
+                "no enough bytes when decode records (remaining: {})",
+                buf.remaining()
+            )))?
+        }
+
+        let record_size = (&buf[LENGTH_OFFSET..]).get_i32();
+        let batch_size = record_size as usize + LOG_OVERHEAD;
+        if buf.remaining() < batch_size {
+            Err(err_codec_message(format!(
+                "no enough bytes when decode records (remaining: {})",
+                buf.remaining()
+            )))?
+        }
+
+        let record = match (&buf[MAGIC_OFFSET..]).get_i8() {
+            2 => {
+                let buf = buf.split_to(batch_size);
+                RecordBatch { buf }
+            }
+            v => unimplemented!("record batch version {}", v),
+        };
+
+        records.push(record);
+    }
+    Ok(records)
 }
 
-impl Debug for RecordBatch<'_> {
-    fn fmt(&self, _f: &mut Formatter<'_>) -> std::fmt::Result {
-        todo!("dump fields - this can be a time consuming method")
+#[derive(Default, Clone)]
+pub struct RecordBatch {
+    buf: bytes::BytesMut,
+}
+
+impl Debug for RecordBatch {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut de = f.debug_struct("RecordBatch");
+        de.field("base_offset", &self.base_offset());
+        de.field("last_offset_delta", &self.last_offset_delta());
+        de.field("records_count", &self.records_count());
+        // ATTENTION - this can be time consuming
+        de.field("records", &self.records());
+        de.finish()
     }
 }
 
-impl<'a> RecordBatch<'a> {
+impl RecordBatch {
     pub fn set_last_offset(&mut self, offset: i64) {
-        let base_offset = offset - self.last_offset_delta();
-        self.slice_mut(BASE_OFFSET_OFFSET).put_i64(base_offset);
+        let base_offset = offset - self.last_offset_delta() as i64;
+        (&mut self.buf[BASE_OFFSET_OFFSET..]).put_i64(base_offset);
     }
 
-    pub fn last_offset_delta(&self) -> i64 {
-        self.slice(LAST_OFFSET_DELTA_OFFSET).get_i64()
+    pub fn base_offset(&self) -> i64 {
+        (&self.buf[BASE_OFFSET_OFFSET..]).get_i64()
     }
 
-    pub fn count(&self) -> i32 {
-        self.slice(RECORDS_COUNT_OFFSET).get_i32()
+    pub fn last_offset_delta(&self) -> i32 {
+        (&self.buf[LAST_OFFSET_DELTA_OFFSET..]).get_i32()
+    }
+
+    pub fn records_count(&self) -> i32 {
+        (&self.buf[RECORDS_COUNT_OFFSET..]).get_i32()
     }
 
     pub fn records(&self) -> Vec<Record> {
-        let mut cursor = self.slice(RECORDS_COUNT_OFFSET);
+        let mut cursor = Cursor::new(&self.buf[RECORDS_COUNT_OFFSET..]);
         RecordList.decode(&mut cursor).expect("malformed records")
-    }
-
-    fn slice_mut(&mut self, pos: usize) -> &mut [u8] {
-        &mut self.buf[pos..]
-    }
-
-    fn slice(&self, pos: usize) -> Cursor<&[u8]> {
-        let mut cursor = Cursor::new(&self.buf[..]);
-        cursor.set_position(pos as u64);
-        cursor
     }
 }
 
@@ -203,13 +223,13 @@ mod tests {
 
     #[test]
     fn test_codec_records() -> io::Result<()> {
-        let mut records = Records {
-            buf: Vec::from(RECORD),
+        let records = Records {
+            buf: bytes::BytesMut::from(RECORD),
         };
-        let record_batches = records.batches()?;
+        let record_batches = records.into_batches()?;
         assert_eq!(record_batches.len(), 1);
         let record_batch = &record_batches[0];
-        assert_eq!(record_batch.count(), 1);
+        assert_eq!(record_batch.records_count(), 1);
         let record_vec = record_batch.records();
         assert_eq!(record_vec.len(), 1);
         let record = &record_vec[0];

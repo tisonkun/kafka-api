@@ -64,7 +64,7 @@ pub enum Request {
 }
 
 impl Request {
-    pub fn decode(mut buf: BytesMut) -> io::Result<(RequestHeader, Request)> {
+    pub fn decode(buf: &mut BytesMut) -> io::Result<(RequestHeader, Request)> {
         let header_version = {
             let mut cursor = Cursor::new(&buf[..]);
             let api_key = Int16.decode(&mut cursor)?;
@@ -72,47 +72,44 @@ impl Request {
             ApiMessageType::try_from(api_key)?.request_header_version(api_version)
         };
 
-        let header = RequestHeader::decode(&mut buf, header_version)?;
+        let header = RequestHeader::decode(buf, header_version)?;
         let api_type = ApiMessageType::try_from(header.request_api_key)?;
         let api_version = header.request_api_version;
 
         let request = match api_type {
             ApiMessageType::API_VERSIONS => {
-                api_versions_request::ApiVersionsRequest::decode(&mut buf, api_version)
+                api_versions_request::ApiVersionsRequest::decode(buf, api_version)
                     .map(Request::ApiVersionsRequest)
             }
             ApiMessageType::CREATE_TOPICS => {
-                create_topic_request::CreateTopicsRequest::decode(&mut buf, api_version)
+                create_topic_request::CreateTopicsRequest::decode(buf, api_version)
                     .map(Request::CreateTopicRequest)
             }
-            ApiMessageType::FETCH => fetch_request::FetchRequest::decode(&mut buf, api_version)
-                .map(Request::FetchRequest),
+            ApiMessageType::FETCH => {
+                fetch_request::FetchRequest::decode(buf, api_version).map(Request::FetchRequest)
+            }
             ApiMessageType::FIND_COORDINATOR => {
-                find_coordinator_request::FindCoordinatorRequest::decode(&mut buf, api_version)
+                find_coordinator_request::FindCoordinatorRequest::decode(buf, api_version)
                     .map(Request::FindCoordinatorRequest)
             }
             ApiMessageType::INIT_PRODUCER_ID => {
-                init_producer_id_request::InitProducerIdRequest::decode(&mut buf, api_version)
+                init_producer_id_request::InitProducerIdRequest::decode(buf, api_version)
                     .map(Request::InitProducerIdRequest)
             }
             ApiMessageType::JOIN_GROUP => {
-                join_group_request::JoinGroupRequest::decode(&mut buf, api_version)
+                join_group_request::JoinGroupRequest::decode(buf, api_version)
                     .map(Request::JoinGroupRequest)
             }
-            ApiMessageType::METADATA => {
-                metadata_request::MetadataRequest::decode(&mut buf, api_version)
-                    .map(Request::MetadataRequest)
-            }
+            ApiMessageType::METADATA => metadata_request::MetadataRequest::decode(buf, api_version)
+                .map(Request::MetadataRequest),
             ApiMessageType::OFFSET_FETCH => {
-                offset_fetch_request::OffsetFetchRequest::decode(&mut buf, api_version)
+                offset_fetch_request::OffsetFetchRequest::decode(buf, api_version)
                     .map(Request::OffsetFetchRequest)
             }
-            ApiMessageType::PRODUCE => {
-                produce_request::ProduceRequest::decode(&mut buf, api_version)
-                    .map(Request::ProduceRequest)
-            }
+            ApiMessageType::PRODUCE => produce_request::ProduceRequest::decode(buf, api_version)
+                .map(Request::ProduceRequest),
             ApiMessageType::SYNC_GROUP => {
-                sync_group_request::SyncGroupRequest::decode(&mut buf, api_version)
+                sync_group_request::SyncGroupRequest::decode(buf, api_version)
                     .map(Request::SyncGroupRequest)
             }
             _ => unimplemented!("{}", api_type.api_key),
