@@ -13,10 +13,11 @@
 // limitations under the License.
 
 #![feature(io_error_other)]
+#![feature(min_specialization)]
 
 use std::{fmt::Display, io};
 
-pub use codec::{Deserializable, RawTaggedField, Serializable};
+pub use codec::{Deserializable, RawTaggedField, Readable, Serializable};
 pub use schemata::*;
 
 pub mod apikey;

@@ -14,26 +14,15 @@
 
 use std::{io, mem::size_of};
 
-use bytes::{Buf, BufMut};
+use bytes::BufMut;
 
+pub use crate::codec::readable::Readable;
 use crate::{
     err_codec_message, err_io_other,
     record::{Header, Record},
 };
 
-pub trait Readable: Buf {
-    fn copy_to_bytes_mut(&mut self, len: usize) -> bytes::BytesMut {
-        bytes::BytesMut::from_iter(Vec::from(self.copy_to_bytes(len)))
-    }
-}
-
-impl<T: AsRef<[u8]>> Readable for io::Cursor<T> {}
-impl Readable for bytes::Bytes {}
-impl Readable for bytes::BytesMut {
-    fn copy_to_bytes_mut(&mut self, len: usize) -> bytes::BytesMut {
-        self.split_to(len)
-    }
-}
+pub mod readable;
 
 pub trait Decoder<T: Sized> {
     fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<T>;
@@ -367,17 +356,6 @@ impl Encoder<&str> for NullableString {
 #[derive(Debug, Copy, Clone)]
 pub(super) struct NullableBytes(pub bool /* flexible */);
 
-impl Decoder<Option<bytes::BytesMut>> for NullableBytes {
-    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Option<bytes::BytesMut>> {
-        let len = if self.0 {
-            VarInt.decode(buf)? - 1
-        } else {
-            Int16.decode(buf)? as i32
-        };
-        read_nullable_bytes_mut(buf, len, "bytes")
-    }
-}
-
 impl Decoder<Option<bytes::Bytes>> for NullableBytes {
     fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Option<bytes::Bytes>> {
         let len = if self.0 {
@@ -463,31 +441,6 @@ fn write_slice<B: BufMut>(buf: &mut B, slice: Option<&[u8]>, flexible: bool) -> 
         }
     }
     Ok(())
-}
-
-fn read_nullable_bytes_mut<B: Readable>(
-    buf: &mut B,
-    len: i32,
-    ty: &str,
-) -> io::Result<Option<bytes::BytesMut>> {
-    match len {
-        -1 => Ok(None),
-        n if n >= 0 => {
-            let n = n as usize;
-            let bs = if buf.remaining() >= n {
-                Ok(buf.copy_to_bytes_mut(n))
-            } else {
-                Err(err_codec_message(format!(
-                    "no enough {n} bytes when decode {ty:?} (remaining: {})",
-                    buf.remaining()
-                )))
-            }?;
-            Ok(Some(bs))
-        }
-        n => Err(err_codec_message(format!(
-            "illegal length {n} when decode {ty}"
-        ))),
-    }
 }
 
 fn read_nullable_bytes<B: Readable>(

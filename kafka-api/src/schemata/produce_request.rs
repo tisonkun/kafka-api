@@ -117,10 +117,7 @@ impl Deserializable for PartitionProduceData {
         }
         let mut this = PartitionProduceData {
             index: Int32.decode(buf)?,
-            records: {
-                let bs: Option<bytes::BytesMut> = NullableBytes(version >= 9).decode(buf)?;
-                bs.map(Records::new)
-            },
+            records: buf.read_records(version >= 9)?,
             ..Default::default()
         };
         if version >= 9 {

@@ -111,10 +111,9 @@ impl Deserializable for JoinGroupRequestProtocol {
             name: NullableString(version >= 6)
                 .decode(buf)?
                 .ok_or_else(|| err_decode_message_null("name"))?,
-            metadata: {
-                let bs: Option<bytes::Bytes> = NullableBytes(version >= 6).decode(buf)?;
-                bs.ok_or_else(|| err_decode_message_null("metadata"))?
-            },
+            metadata: NullableBytes(version >= 6)
+                .decode(buf)?
+                .ok_or_else(|| err_decode_message_null("metadata"))?,
             ..Default::default()
         };
         if version >= 6 {

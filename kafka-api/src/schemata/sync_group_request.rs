@@ -98,10 +98,9 @@ impl Deserializable for SyncGroupRequestAssignment {
             member_id: NullableString(version >= 4)
                 .decode(buf)?
                 .ok_or_else(|| err_decode_message_null("member_id"))?,
-            assignment: {
-                let bs: Option<bytes::Bytes> = NullableBytes(version >= 4).decode(buf)?;
-                bs.ok_or_else(|| err_decode_message_null("assignment"))?
-            },
+            assignment: NullableBytes(version >= 4)
+                .decode(buf)?
+                .ok_or_else(|| err_decode_message_null("assignment"))?,
             ..Default::default()
         };
         if version >= 4 {

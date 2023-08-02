@@ -120,6 +120,7 @@ impl Debug for RecordBatch {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut de = f.debug_struct("RecordBatch");
         de.field("base_offset", &self.base_offset());
+        de.field("base_sequence", &self.base_sequence());
         de.field("last_offset_delta", &self.last_offset_delta());
         de.field("records_count", &self.records_count());
         de.field("records", &self.records());
@@ -140,6 +141,10 @@ impl RecordBatch {
 
     pub fn base_offset(&self) -> i64 {
         (&self.meta[BASE_OFFSET_OFFSET..]).get_i64()
+    }
+
+    pub fn base_sequence(&self) -> i32 {
+        (&self.meta[BASE_SEQUENCE_OFFSET..]).get_i32()
     }
 
     pub fn last_offset_delta(&self) -> i32 {
