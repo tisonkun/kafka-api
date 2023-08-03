@@ -427,13 +427,22 @@ impl Encoder<Option<&ReadOnlyRecords>> for NullableRecords {
     }
 
     fn calculate_size(&self, value: Option<&ReadOnlyRecords>) -> usize {
-        if self.0 {
-            match value {
-                None => 1,
-                Some(r) => VarInt.calculate_size(r.len() as i32 + 1),
+        match value {
+            None => {
+                if self.0 {
+                    1
+                } else {
+                    Int16::SIZE
+                }
             }
-        } else {
-            Int16::SIZE
+            Some(r) => {
+                r.len()
+                    + if self.0 {
+                        VarInt.calculate_size(r.len() as i32 + 1)
+                    } else {
+                        Int16::SIZE
+                    }
+            }
         }
     }
 }
@@ -483,13 +492,22 @@ impl Encoder<&ByteBuffer> for NullableBytes {
 }
 
 fn slice_size(slice: Option<&[u8]>, flexible: bool) -> usize {
-    if flexible {
-        match slice {
-            None => 1,
-            Some(bs) => VarInt.calculate_size(bs.len() as i32 + 1),
+    match slice {
+        None => {
+            if flexible {
+                1
+            } else {
+                Int16::SIZE
+            }
         }
-    } else {
-        Int16::SIZE
+        Some(bs) => {
+            bs.len()
+                + if flexible {
+                    VarInt.calculate_size(bs.len() as i32 + 1)
+                } else {
+                    Int16::SIZE
+                }
+        }
     }
 }
 
