@@ -14,7 +14,7 @@
 
 use core::slice;
 use std::{
-    fmt::{Debug, Formatter},
+    fmt::Debug,
     mem::ManuallyDrop,
     ops::{Deref, RangeBounds},
     ptr::drop_in_place,
@@ -23,6 +23,8 @@ use std::{
 
 use bytes::Buf;
 
+mod format;
+
 #[derive(Clone)]
 pub struct ByteBuffer {
     start: usize,
@@ -30,35 +32,17 @@ pub struct ByteBuffer {
     shared: Arc<Shared>,
 }
 
-impl PartialEq for ByteBuffer {
-    fn eq(&self, other: &ByteBuffer) -> bool {
-        self.as_ref() == other.as_ref()
-    }
+#[derive(Debug, Clone)]
+struct Shared {
+    ptr: *mut u8,
 }
 
-impl From<&str> for ByteBuffer {
-    fn from(value: &str) -> Self {
-        ByteBuffer::new(value.as_bytes().to_vec())
-    }
-}
+unsafe impl Send for Shared {}
+unsafe impl Sync for Shared {}
 
-impl Default for ByteBuffer {
-    fn default() -> Self {
-        ByteBuffer::new(vec![])
-    }
-}
-
-impl AsRef<[u8]> for ByteBuffer {
-    fn as_ref(&self) -> &[u8] {
-        self.chunk()
-    }
-}
-
-impl Deref for ByteBuffer {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        self.chunk()
+impl Drop for Shared {
+    fn drop(&mut self) {
+        unsafe { drop_in_place(self.ptr) }
     }
 }
 
@@ -77,6 +61,14 @@ impl Buf for ByteBuffer {
 }
 
 impl ByteBuffer {
+    pub fn new(v: Vec<u8>) -> Self {
+        let mut me = ManuallyDrop::new(v);
+        let (ptr, end) = (me.as_mut_ptr(), me.len());
+        let start = 0;
+        let shared = Arc::new(Shared { ptr });
+        ByteBuffer { start, end, shared }
+    }
+
     pub fn len(&self) -> usize {
         self.end - self.start
     }
@@ -131,7 +123,6 @@ impl ByteBuffer {
         }
     }
 
-    // SAFETY - modifications are nonoverlapping
     pub fn slice(&self, range: impl RangeBounds<usize>) -> ByteBuffer {
         let (begin, end) = self.check_range(range);
         ByteBuffer {
@@ -142,14 +133,13 @@ impl ByteBuffer {
     }
 
     // SAFETY - modifications are nonoverlapping
-    pub(crate) fn chunk_mut(&mut self) -> &mut [u8] {
-        unsafe { slice::from_raw_parts_mut(self.ptr(), self.len()) }
-    }
-
-    // SAFETY - modifications are nonoverlapping
+    //
+    // We cannot implement AsMut / DerefMut for this conventions, cause impl trait will be public
+    // visible, but we need to narrow the mutations within this crate (for in place mutate memory
+    // batches).
     pub(crate) fn chunk_mut_in(&mut self, range: impl RangeBounds<usize>) -> &mut [u8] {
         let (begin, end) = self.check_range(range);
-        &mut self.chunk_mut()[begin..end]
+        &mut (unsafe { slice::from_raw_parts_mut(self.ptr(), self.len()) }[begin..end])
     }
 
     fn check_range(&self, range: impl RangeBounds<usize>) -> (usize, usize) {
@@ -190,79 +180,34 @@ impl ByteBuffer {
     }
 }
 
-#[derive(Debug, Clone)]
-struct Shared {
-    ptr: *mut u8,
-}
-
-unsafe impl Send for Shared {}
-unsafe impl Sync for Shared {}
-
-impl Drop for Shared {
-    fn drop(&mut self) {
-        unsafe { drop_in_place(self.ptr) }
+impl Default for ByteBuffer {
+    fn default() -> Self {
+        ByteBuffer::new(vec![])
     }
 }
 
-impl ByteBuffer {
-    pub fn new(v: Vec<u8>) -> Self {
-        let mut me = ManuallyDrop::new(v);
-        let (ptr, end) = (me.as_mut_ptr(), me.len());
-        let start = 0;
-        let shared = Arc::new(Shared { ptr });
-        ByteBuffer { start, end, shared }
+impl AsRef<[u8]> for ByteBuffer {
+    fn as_ref(&self) -> &[u8] {
+        self.chunk()
     }
 }
 
-struct ByteBufferRef<'a>(&'a [u8]);
+impl Deref for ByteBuffer {
+    type Target = [u8];
 
-impl Debug for ByteBufferRef<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "b\"")?;
-        for &b in self.0 {
-            // https://doc.rust-lang.org/reference/tokens.html#byte-escapes
-            if b == b'\n' {
-                write!(f, "\\n")?;
-            } else if b == b'\r' {
-                write!(f, "\\r")?;
-            } else if b == b'\t' {
-                write!(f, "\\t")?;
-            } else if b == b'\\' || b == b'"' {
-                write!(f, "\\{}", b as char)?;
-            } else if b == b'\0' {
-                write!(f, "\\0")?;
-            } else if (0x20..0x7f).contains(&b) {
-                // ASCII printable
-                write!(f, "{}", b as char)?;
-            } else {
-                write!(f, "\\x{:02x}", b)?;
-            }
-        }
-        write!(f, "\"")?;
-        Ok(())
+    fn deref(&self) -> &Self::Target {
+        self.chunk()
     }
 }
 
-impl Debug for ByteBuffer {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(&ByteBufferRef(self.as_ref()), f)
+impl From<&str> for ByteBuffer {
+    fn from(value: &str) -> Self {
+        ByteBuffer::new(value.as_bytes().to_vec())
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use bytes::Buf;
-
-    use crate::bytebuffer::ByteBuffer;
-
-    #[test]
-    fn test_raii() {
-        let v = "vec![1, 2, 3]".as_bytes().to_vec();
-        let mut bb = ByteBuffer::new(v);
-        println!("{:?}", bb);
-        println!("{:?}", bb.slice(1..=2));
-        while bb.has_remaining() {
-            println!("{}", bb.get_u8());
-        }
+impl PartialEq for ByteBuffer {
+    fn eq(&self, other: &ByteBuffer) -> bool {
+        self.as_ref() == other.as_ref()
     }
 }
