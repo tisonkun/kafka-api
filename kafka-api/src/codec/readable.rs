@@ -52,8 +52,7 @@ pub trait Readable {
     }
 
     fn read_records(&mut self, len: usize) -> Records {
-        let bs = self.read_bytes(len);
-        Records::new(ByteBuffer::new(bs.to_vec()))
+        Records::new(self.read_bytes(len))
     }
 
     fn read_uuid(&mut self) -> uuid::Uuid {
@@ -172,9 +171,5 @@ impl Readable for ByteBuffer {
 
     fn read_bytes(&mut self, len: usize) -> ByteBuffer {
         self.split_to(len)
-    }
-
-    fn read_records(&mut self, len: usize) -> Records {
-        Records::new(self.split_to(len))
     }
 }
