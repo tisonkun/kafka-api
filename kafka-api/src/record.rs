@@ -59,41 +59,75 @@ pub const HEADER_SIZE_UP_TO_MAGIC: usize = MAGIC_OFFSET + MAGIC_LENGTH;
 pub const LOG_OVERHEAD: usize = LENGTH_OFFSET + LENGTH_LENGTH;
 
 #[derive(Default)]
-pub struct Records {
+pub struct MutableRecords {
     buf: ByteBuffer,
     batches: OnceCell<Vec<RecordBatch>>,
 }
 
-impl Clone for Records {
+#[derive(Debug, Clone)]
+pub enum ReadOnlyRecords {
+    ByteBuffer(ByteBufferRecords),
+}
+
+impl Default for ReadOnlyRecords {
+    fn default() -> Self {
+        ReadOnlyRecords::ByteBuffer(ByteBufferRecords::default())
+    }
+}
+
+impl ReadOnlyRecords {
+    pub fn len(&self) -> usize {
+        match self {
+            ReadOnlyRecords::ByteBuffer(r) => r.buf.len(),
+        }
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct ByteBufferRecords {
+    pub(crate) buf: ByteBuffer,
+}
+
+impl Clone for MutableRecords {
     /// ATTENTION - Cloning Records is a heavy operation.
     ///
-    /// Records is a public struct and it has a [Records::mut_batches] method that modifies the
-    /// underlying [ByteBuffer]. If we only do a shallow clone, then two Records that doesn't have
-    /// any ownership overlapping can modify the same underlying slice.
+    /// Records is a public struct and it has a [MutableRecords::mut_batches] method that modifies
+    /// the underlying [ByteBuffer]. If we only do a shallow clone, then two Records that
+    /// doesn't have any ownership overlapping can modify the same underlying slice.
     ///
-    /// Generally, Records users iterate over batches with [Records::batches] or
-    /// [Records::mut_batches], and pass ownership instead of clone Records.
+    /// Generally, Records users iterate over batches with [MutableRecords::batches] or
+    /// [MutableRecords::mut_batches], and pass ownership instead of clone Records.
     ///
     /// This clone behavior is similar to clone a [Vec].
     fn clone(&self) -> Self {
         warn!("Cloning records is a heavy operation and not encouraged.");
-        Records {
+        MutableRecords {
             buf: ByteBuffer::new(self.buf.to_vec()),
             batches: OnceCell::new(),
         }
     }
 }
 
-impl Debug for Records {
+impl Debug for ByteBufferRecords {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(self.batches.get_or_init(|| self.load_batches()), f)
+        Debug::fmt(&load_batches(&self.buf), f)
     }
 }
 
-impl Records {
+impl Debug for MutableRecords {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self.batches.get_or_init(|| load_batches(&self.buf)), f)
+    }
+}
+
+impl MutableRecords {
     pub fn new(buf: ByteBuffer) -> Self {
         let batches = OnceCell::new();
-        Records { buf, batches }
+        MutableRecords { buf, batches }
+    }
+
+    pub fn freeze(self) -> ReadOnlyRecords {
+        ReadOnlyRecords::ByteBuffer(ByteBufferRecords { buf: self.buf })
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -101,51 +135,51 @@ impl Records {
     }
 
     pub fn mut_batches(&mut self) -> IterMut<'_, RecordBatch> {
-        self.batches.get_or_init(|| self.load_batches());
+        self.batches.get_or_init(|| load_batches(&self.buf));
         // SAFETY - init above
         unsafe { self.batches.get_mut().unwrap_unchecked() }.iter_mut()
     }
 
     pub fn batches(&self) -> Iter<'_, RecordBatch> {
-        self.batches.get_or_init(|| self.load_batches()).iter()
+        self.batches.get_or_init(|| load_batches(&self.buf)).iter()
+    }
+}
+
+fn load_batches(buf: &ByteBuffer) -> Vec<RecordBatch> {
+    let mut batches = vec![];
+
+    let mut offset = 0;
+    let mut remaining = buf.len() - offset;
+    while remaining > 0 {
+        assert!(
+            remaining >= HEADER_SIZE_UP_TO_MAGIC,
+            "no enough bytes when decode records (remaining: {})",
+            remaining
+        );
+
+        let record_size = (&buf[LENGTH_OFFSET..]).get_i32();
+        let batch_size = record_size as usize + LOG_OVERHEAD;
+
+        assert!(
+            remaining >= batch_size,
+            "no enough bytes when decode records (remaining: {})",
+            remaining
+        );
+
+        let record = match (&buf[MAGIC_OFFSET..]).get_i8() {
+            2 => {
+                let buf = buf.slice(offset..offset + batch_size);
+                offset += batch_size;
+                remaining -= batch_size;
+                RecordBatch { buf }
+            }
+            v => unimplemented!("record batch version {}", v),
+        };
+
+        batches.push(record);
     }
 
-    fn load_batches(&self) -> Vec<RecordBatch> {
-        let mut batches = vec![];
-
-        let mut offset = 0;
-        let mut remaining = self.buf.len() - offset;
-        while remaining > 0 {
-            assert!(
-                remaining >= HEADER_SIZE_UP_TO_MAGIC,
-                "no enough bytes when decode records (remaining: {})",
-                remaining
-            );
-
-            let record_size = (&self.buf[LENGTH_OFFSET..]).get_i32();
-            let batch_size = record_size as usize + LOG_OVERHEAD;
-
-            assert!(
-                remaining >= batch_size,
-                "no enough bytes when decode records (remaining: {})",
-                remaining
-            );
-
-            let record = match (&self.buf[MAGIC_OFFSET..]).get_i8() {
-                2 => {
-                    let buf = self.buf.slice(offset..offset + batch_size);
-                    offset += batch_size;
-                    remaining -= batch_size;
-                    RecordBatch { buf }
-                }
-                v => unimplemented!("record batch version {}", v),
-            };
-
-            batches.push(record);
-        }
-
-        batches
-    }
+    batches
 }
 
 #[derive(Default)]
@@ -251,7 +285,7 @@ mod tests {
 
     #[test]
     fn test_codec_records() -> io::Result<()> {
-        let records = Records::new(ByteBuffer::new(RECORD.to_vec()));
+        let records = MutableRecords::new(ByteBuffer::new(RECORD.to_vec()));
         let record_batches = records.batches().collect::<Vec<_>>();
         assert_eq!(record_batches.len(), 1);
         let record_batch = &record_batches[0];

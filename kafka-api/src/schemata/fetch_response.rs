@@ -14,7 +14,7 @@
 
 use std::io;
 
-use crate::{codec::*, err_encode_message_unsupported, record::Records};
+use crate::{codec::*, err_encode_message_unsupported, record::ReadOnlyRecords};
 
 // Version 1 adds throttle time.
 //
@@ -165,7 +165,7 @@ pub struct PartitionData {
     /// The preferred read replica for the consumer to use on its next fetch request
     pub preferred_read_replica: i32,
     /// The record data.
-    pub records: Records,
+    pub records: ReadOnlyRecords,
     /// Unknown tagged fields.
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }

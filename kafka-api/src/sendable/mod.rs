@@ -16,7 +16,7 @@ use std::io;
 
 use bytes::BufMut;
 
-use crate::{bytebuffer::ByteBuffer, codec::writable::Writable, record::Records};
+use crate::{bytebuffer::ByteBuffer, codec::writable::Writable, record::ReadOnlyRecords};
 
 pub struct SendBuilder<'a> {
     sends: Vec<Sendable<'a>>,
@@ -85,7 +85,7 @@ impl<'a> Writable<'a> for SendBuilder<'a> {
         Ok(())
     }
 
-    fn write_records(&mut self, r: &'a Records) -> io::Result<()> {
+    fn write_records(&mut self, r: &'a ReadOnlyRecords) -> io::Result<()> {
         self.flush_bytes();
         self.sends.push(Sendable::Records(r));
         Ok(())
@@ -122,7 +122,7 @@ impl<'a> SendBuilder<'a> {
 pub enum Sendable<'a> {
     Bytes(bytes::Bytes),
     ByteBuffer(ByteBuffer),
-    Records(&'a Records),
+    Records(&'a ReadOnlyRecords),
 }
 
 impl Sendable<'_> {
@@ -133,7 +133,9 @@ impl Sendable<'_> {
         match self {
             Sendable::Bytes(bs) => writer.write_all(bs.as_ref()),
             Sendable::ByteBuffer(buf) => writer.write_all(buf.as_bytes()),
-            Sendable::Records(r) => writer.write_all(r.as_bytes()),
+            Sendable::Records(r) => match r {
+                ReadOnlyRecords::ByteBuffer(r) => writer.write_all(r.buf.as_bytes()),
+            },
         }
     }
 }

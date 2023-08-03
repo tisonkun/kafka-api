@@ -18,7 +18,7 @@ pub use crate::codec::{readable::Readable, writable::Writable};
 use crate::{
     bytebuffer::ByteBuffer,
     err_codec_message,
-    record::{Header, Record, Records},
+    record::{Header, MutableRecords, ReadOnlyRecords, Record},
 };
 
 pub mod readable;
@@ -382,8 +382,8 @@ impl Encoder<&str> for NullableString {
 #[derive(Debug, Copy, Clone)]
 pub(super) struct NullableRecords(pub bool /* flexible */);
 
-impl Decoder<Option<Records>> for NullableRecords {
-    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Option<Records>> {
+impl Decoder<Option<MutableRecords>> for NullableRecords {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Option<MutableRecords>> {
         match if self.0 {
             VarInt.decode(buf)? - 1
         } else {
@@ -408,22 +408,51 @@ impl Decoder<Option<Records>> for NullableRecords {
     }
 }
 
-impl Encoder<Option<&Records>> for NullableRecords {
-    fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: Option<&Records>) -> io::Result<()> {
-        write_slice(buf, value.map(|bs| bs.as_bytes()), self.0)
+impl<'b> Encoder<Option<&'b ReadOnlyRecords>> for NullableRecords {
+    fn encode<'a, B: Writable<'a>>(
+        &self,
+        buf: &mut B,
+        value: Option<&'b ReadOnlyRecords>,
+    ) -> io::Result<()> {
+        match value {
+            None => {
+                if self.0 {
+                    VarInt.encode(buf, 0)?
+                } else {
+                    Int32.encode(buf, -1)?
+                }
+            }
+            Some(r) => {
+                let len = r.len() as i16;
+                if self.0 {
+                    VarInt.encode(buf, len as i32 + 1)?;
+                } else {
+                    Int16.encode(buf, len)?;
+                }
+                buf.write_records(r)?;
+            }
+        }
+        Ok(())
     }
 
-    fn calculate_size(&self, value: Option<&Records>) -> usize {
-        slice_size(value.map(|bs| bs.as_bytes()), self.0)
+    fn calculate_size(&self, value: Option<&ReadOnlyRecords>) -> usize {
+        if self.0 {
+            match value {
+                None => 1,
+                Some(r) => VarInt.calculate_size(r.len() as i32 + 1),
+            }
+        } else {
+            Int16::SIZE
+        }
     }
 }
 
-impl Encoder<&Records> for NullableRecords {
-    fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: &Records) -> io::Result<()> {
+impl Encoder<&ReadOnlyRecords> for NullableRecords {
+    fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: &ReadOnlyRecords) -> io::Result<()> {
         self.encode(buf, Some(value))
     }
 
-    fn calculate_size(&self, value: &Records) -> usize {
+    fn calculate_size(&self, value: &ReadOnlyRecords) -> usize {
         self.calculate_size(Some(value))
     }
 }
@@ -467,16 +496,13 @@ impl Encoder<&ByteBuffer> for NullableBytes {
 }
 
 fn slice_size(slice: Option<&[u8]>, flexible: bool) -> usize {
-    match slice {
-        None => 1,
-        Some(bs) => {
-            let len = bs.len();
-            len + if flexible {
-                VarInt.calculate_size(len as i32 + 1)
-            } else {
-                Int16.calculate_size(len as i16)
-            }
+    if flexible {
+        match slice {
+            None => 1,
+            Some(bs) => VarInt.calculate_size(bs.len() as i32 + 1),
         }
+    } else {
+        Int16::SIZE
     }
 }
 
