@@ -49,9 +49,27 @@ impl Deref for ByteBuffer {
     }
 }
 
+impl Buf for ByteBuffer {
+    fn remaining(&self) -> usize {
+        self.len()
+    }
+
+    fn chunk(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts_mut(self.ptr(), self.len()) }
+    }
+
+    fn advance(&mut self, cnt: usize) {
+        self.start += cnt
+    }
+}
+
 impl ByteBuffer {
     pub fn len(&self) -> usize {
         self.end - self.start
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.end <= self.start
     }
 
     #[must_use = "consider ByteBuffer::advance if you don't need the other half"]
@@ -111,12 +129,12 @@ impl ByteBuffer {
     }
 
     // SAFETY - modifications are nonoverlapping
-    pub(crate) fn chunk_mut(&self) -> &mut [u8] {
+    pub(crate) fn chunk_mut(&mut self) -> &mut [u8] {
         unsafe { slice::from_raw_parts_mut(self.ptr(), self.len()) }
     }
 
     // SAFETY - modifications are nonoverlapping
-    pub(crate) fn chunk_mut_in(&self, range: impl RangeBounds<usize>) -> &mut [u8] {
+    pub(crate) fn chunk_mut_in(&mut self, range: impl RangeBounds<usize>) -> &mut [u8] {
         let (begin, end) = self.check_range(range);
         &mut self.chunk_mut()[begin..end]
     }
@@ -155,21 +173,7 @@ impl ByteBuffer {
     }
 
     unsafe fn ptr(&self) -> *mut u8 {
-        self.shared.ptr.offset(self.start as isize)
-    }
-}
-
-impl Buf for ByteBuffer {
-    fn remaining(&self) -> usize {
-        self.len()
-    }
-
-    fn chunk(&self) -> &[u8] {
-        unsafe { slice::from_raw_parts_mut(self.ptr(), self.len()) }
-    }
-
-    fn advance(&mut self, cnt: usize) {
-        self.start += cnt
+        self.shared.ptr.add(self.start)
     }
 }
 
@@ -177,6 +181,9 @@ impl Buf for ByteBuffer {
 struct Shared {
     ptr: *mut u8,
 }
+
+unsafe impl Send for Shared {}
+unsafe impl Sync for Shared {}
 
 impl Drop for Shared {
     fn drop(&mut self) {

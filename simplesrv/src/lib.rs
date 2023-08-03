@@ -23,6 +23,7 @@ use kafka_api::{
     api_versions_request::ApiVersionsRequest,
     api_versions_response::{ApiVersion, ApiVersionsResponse},
     apikey::ApiMessageType,
+    bytebuffer::ByteBuffer,
     create_topic_request::CreateTopicsRequest,
     create_topic_response::{CreatableTopicResult, CreateTopicsResponse},
     error::Error,
@@ -586,7 +587,7 @@ impl Broker {
                     high_watermark: committed_index,
                     last_stable_offset: committed_index,
                     log_start_offset: 0,
-                    records: Records::new(records),
+                    records: Records::new(ByteBuffer::new(records.to_vec())),
                     ..Default::default()
                 });
             }
