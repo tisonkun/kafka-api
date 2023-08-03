@@ -582,10 +582,10 @@ impl Broker {
                     for batch in r.batches() {
                         let last_offset = batch.base_offset() + batch.last_offset_delta() as i64;
                         if last_offset >= fetch_offset {
-                            return false;
+                            return true;
                         }
                     }
-                    true
+                    false
                 });
                 partitions.push(PartitionData {
                     partition_index: idx,
