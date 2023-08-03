@@ -14,6 +14,7 @@
 
 use core::slice;
 use std::{
+    fmt::{Debug, Formatter},
     mem::ManuallyDrop,
     ops::{Deref, RangeBounds},
     ptr::drop_in_place,
@@ -22,7 +23,7 @@ use std::{
 
 use bytes::Buf;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ByteBuffer {
     start: usize,
     end: usize,
@@ -201,6 +202,41 @@ impl ByteBuffer {
     }
 }
 
+struct ByteBufferRef<'a>(&'a [u8]);
+
+impl Debug for ByteBufferRef<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "b\"")?;
+        for &b in self.0 {
+            // https://doc.rust-lang.org/reference/tokens.html#byte-escapes
+            if b == b'\n' {
+                write!(f, "\\n")?;
+            } else if b == b'\r' {
+                write!(f, "\\r")?;
+            } else if b == b'\t' {
+                write!(f, "\\t")?;
+            } else if b == b'\\' || b == b'"' {
+                write!(f, "\\{}", b as char)?;
+            } else if b == b'\0' {
+                write!(f, "\\0")?;
+            } else if (0x20..0x7f).contains(&b) {
+                // ASCII printable
+                write!(f, "{}", b as char)?;
+            } else {
+                write!(f, "\\x{:02x}", b)?;
+            }
+        }
+        write!(f, "\"")?;
+        Ok(())
+    }
+}
+
+impl Debug for ByteBuffer {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(&ByteBufferRef(self.as_ref()), f)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use bytes::Buf;
@@ -209,7 +245,7 @@ mod tests {
 
     #[test]
     fn test_raii() {
-        let v = vec![1, 2, 3];
+        let v = "vec![1, 2, 3]".as_bytes().to_vec();
         let mut bb = ByteBuffer::new(v);
         println!("{:?}", bb);
         println!("{:?}", bb.slice(1..=2));
