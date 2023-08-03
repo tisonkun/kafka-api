@@ -18,11 +18,11 @@ use std::{
     sync::atomic::{AtomicI64, Ordering},
 };
 
-use bytes::BytesMut;
 use kafka_api::{
     api_versions_request::ApiVersionsRequest,
     api_versions_response::{ApiVersion, ApiVersionsResponse},
     apikey::ApiMessageType,
+    bytebuffer::ByteBuffer,
     create_topic_request::CreateTopicsRequest,
     create_topic_response::{CreatableTopicResult, CreateTopicsResponse},
     error::Error,
@@ -45,7 +45,7 @@ use kafka_api::{
     },
     produce_request::ProduceRequest,
     produce_response::{PartitionProduceResponse, ProduceResponse, TopicProduceResponse},
-    record::{RecordBatch, Records},
+    record::Records,
     request_header::RequestHeader,
     sync_group_request::SyncGroupRequest,
     sync_group_response::SyncGroupResponse,
@@ -158,7 +158,7 @@ impl GroupMeta {
             .collect()
     }
 
-    fn sync(&mut self, assignments: BTreeMap<String, bytes::Bytes>) {
+    fn sync(&mut self, assignments: BTreeMap<String, ByteBuffer>) {
         for member in self.members.values_mut() {
             let assignment = assignments
                 .get(&member.member_id)
@@ -177,8 +177,8 @@ struct MemberMeta {
     client_id: String,
     client_host: String,
     protocol_type: String,
-    protocols: BTreeMap<String, bytes::Bytes>,
-    assignment: bytes::Bytes,
+    protocols: BTreeMap<String, ByteBuffer>,
+    assignment: ByteBuffer,
     rebalance_timeout_ms: i32,
     session_timeout_ms: i32,
 }
@@ -205,7 +205,7 @@ pub struct Broker {
     cluster_meta: ClusterMeta,
     topics: BTreeMap<String, TopicMeta>,
     producers: AtomicI64,
-    topic_partition_store: BTreeMap<(uuid::Uuid, i32), (i64, Vec<RecordBatch>)>,
+    topic_partition_store: BTreeMap<(uuid::Uuid, i32), (i64, Vec<Records>)>,
     group_coordinator: GroupCoordinator,
 }
 
@@ -382,18 +382,18 @@ impl Broker {
             let mut partition_responses = vec![];
             for partition in topic.partition_data {
                 let idx = partition.index;
-                if let Some(records) = partition.records {
+                if let Some(mut records) = partition.records {
                     // TODO - return error on topic partition not exist
                     let (last_offset, store) = self
                         .topic_partition_store
                         .get_mut(&(topic_meta.topic_id, idx))
                         .unwrap();
-                    for mut batch in records.into_batches().expect("malformed records") {
+                    for batch in records.mut_batches() {
                         trace!("storing batch {batch:?} with last_offset {last_offset}");
                         *last_offset += batch.records_count() as i64;
                         batch.set_last_offset(*last_offset - 1);
-                        store.push(batch);
                     }
+                    store.push(records);
                 }
                 partition_responses.push(PartitionProduceResponse {
                     index: idx,
@@ -478,7 +478,7 @@ impl Broker {
                 .cloned()
                 .map(|p| (p.name, p.metadata))
                 .collect(),
-            assignment: bytes::Bytes::new(),
+            assignment: ByteBuffer::default(),
             rebalance_timeout_ms: request.rebalance_timeout_ms,
             session_timeout_ms: request.session_timeout_ms,
         };
@@ -515,7 +515,7 @@ impl Broker {
             .iter()
             .cloned()
             .map(|assign| (assign.member_id, assign.assignment))
-            .collect::<BTreeMap<String, bytes::Bytes>>();
+            .collect::<BTreeMap<String, ByteBuffer>>();
         let group = self
             .group_coordinator
             .groups
@@ -577,16 +577,22 @@ impl Broker {
                     .get(&(topic_id, idx))
                     .expect("partition not found");
                 let committed_index = partition.0;
-                let mut records = BytesMut::new();
-                for record in partition.1.iter() {
-                    record.copy_write_to(&mut records);
-                }
+                let fetch_offset = part.fetch_offset;
+                let records = partition.1.iter().find(|r| {
+                    for batch in r.batches() {
+                        let last_offset = batch.base_offset() + batch.last_offset_delta() as i64;
+                        if last_offset >= fetch_offset {
+                            return false;
+                        }
+                    }
+                    true
+                });
                 partitions.push(PartitionData {
                     partition_index: idx,
                     high_watermark: committed_index,
                     last_stable_offset: committed_index,
                     log_start_offset: 0,
-                    records: Records::new(records),
+                    records: records.cloned().unwrap_or_default(),
                     ..Default::default()
                 });
             }

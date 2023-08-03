@@ -16,7 +16,7 @@ use std::io;
 
 use bytes::BufMut;
 
-use crate::codec::*;
+use crate::{bytebuffer::ByteBuffer, codec::*};
 
 // Version 1 adds throttle time.
 //
@@ -42,7 +42,7 @@ pub struct SyncGroupResponse {
     /// The group protocol name
     pub protocol_name: Option<String>,
     /// The member assignment.
-    pub assignment: bytes::Bytes,
+    pub assignment: ByteBuffer,
     /// Unknown tagged fields.
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }

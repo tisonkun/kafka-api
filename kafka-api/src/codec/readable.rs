@@ -16,7 +16,7 @@ use std::{io, mem::size_of};
 
 use bytes::Buf;
 
-use crate::{err_codec_message, record::Records, RawTaggedField};
+use crate::{bytebuffer::ByteBuffer, err_codec_message, record::Records, RawTaggedField};
 
 fn varint_zigzag(i: i32) -> i32 {
     (((i as u32) >> 1) as i32) ^ -(i & 1)
@@ -38,7 +38,8 @@ pub trait Readable {
     fn read_u64(&mut self) -> u64;
     fn read_f32(&mut self) -> f32;
     fn read_f64(&mut self) -> f64;
-    fn read_bytes(&mut self, len: usize) -> bytes::Bytes;
+
+    fn read_bytes(&mut self, len: usize) -> ByteBuffer;
 
     fn read_string(&mut self, len: usize) -> String {
         let bs = self.read_bytes(len);
@@ -52,7 +53,7 @@ pub trait Readable {
 
     fn read_records(&mut self, len: usize) -> Records {
         let bs = self.read_bytes(len);
-        Records::new(bytes::BytesMut::from(&bs[..]))
+        Records::new(ByteBuffer::new(bs.to_vec()))
     }
 
     fn read_uuid(&mut self) -> uuid::Uuid {
@@ -155,27 +156,23 @@ macro_rules! delegate_forward_buf {
         fn read_f64(&mut self) -> f64 {
             self.get_f64()
         }
-
-        fn read_bytes(&mut self, len: usize) -> bytes::Bytes {
-            self.copy_to_bytes(len)
-        }
     };
 }
 
 impl Readable for &[u8] {
     delegate_forward_buf!();
+
+    fn read_bytes(&mut self, _: usize) -> ByteBuffer {
+        unreachable!("this implementation is only for peeking size")
+    }
 }
 
-impl<T: AsRef<[u8]>> Readable for io::Cursor<T> {
+impl Readable for ByteBuffer {
     delegate_forward_buf!();
-}
 
-impl Readable for bytes::Bytes {
-    delegate_forward_buf!();
-}
-
-impl Readable for bytes::BytesMut {
-    delegate_forward_buf!();
+    fn read_bytes(&mut self, len: usize) -> ByteBuffer {
+        self.split_to(len)
+    }
 
     fn read_records(&mut self, len: usize) -> Records {
         Records::new(self.split_to(len))

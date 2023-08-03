@@ -18,6 +18,7 @@ pub use codec::{Deserializable, RawTaggedField, Readable, Serializable};
 pub use schemata::*;
 
 pub mod apikey;
+pub mod bytebuffer;
 pub(crate) mod codec;
 pub mod error;
 pub mod record;

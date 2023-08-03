@@ -14,7 +14,9 @@
 
 use std::io;
 
-use crate::{codec::*, err_decode_message_null, err_decode_message_unsupported};
+use crate::{
+    bytebuffer::ByteBuffer, codec::*, err_decode_message_null, err_decode_message_unsupported,
+};
 
 // Versions 1 and 2 are the same as version 0.
 //
@@ -81,7 +83,7 @@ pub struct SyncGroupRequestAssignment {
     /// The ID of the member to assign.
     pub member_id: String,
     /// The member assignment.
-    pub assignment: bytes::Bytes,
+    pub assignment: ByteBuffer,
     /// Unknown tagged fields.
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }

@@ -18,6 +18,7 @@ use bytes::BufMut;
 
 pub use crate::codec::readable::Readable;
 use crate::{
+    bytebuffer::ByteBuffer,
     err_codec_message,
     record::{Header, Record, Records},
 };
@@ -30,7 +31,6 @@ pub trait Decoder<T: Sized> {
 
 pub trait Encoder<T> {
     fn encode<B: BufMut>(&self, buf: &mut B, value: T) -> io::Result<()>;
-
     fn calculate_size(&self, value: T) -> usize;
 }
 
@@ -54,7 +54,7 @@ pub trait Serializable: Sized {
 #[derive(Debug, Default, Clone)]
 pub struct RawTaggedField {
     pub tag: i32,
-    pub data: bytes::Bytes,
+    pub data: ByteBuffer,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -457,8 +457,8 @@ impl Encoder<&Records> for NullableRecords {
 #[derive(Debug, Copy, Clone)]
 pub(super) struct NullableBytes(pub bool /* flexible */);
 
-impl Decoder<Option<bytes::Bytes>> for NullableBytes {
-    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Option<bytes::Bytes>> {
+impl Decoder<Option<ByteBuffer>> for NullableBytes {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Option<ByteBuffer>> {
         let len = if self.0 {
             VarInt.decode(buf)? - 1
         } else {
@@ -468,22 +468,22 @@ impl Decoder<Option<bytes::Bytes>> for NullableBytes {
     }
 }
 
-impl Encoder<Option<&bytes::Bytes>> for NullableBytes {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&bytes::Bytes>) -> io::Result<()> {
+impl Encoder<Option<&ByteBuffer>> for NullableBytes {
+    fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&ByteBuffer>) -> io::Result<()> {
         write_slice(buf, value.map(|bs| bs.as_ref()), self.0)
     }
 
-    fn calculate_size(&self, value: Option<&bytes::Bytes>) -> usize {
+    fn calculate_size(&self, value: Option<&ByteBuffer>) -> usize {
         slice_size(value.map(|bs| bs.as_ref()), self.0)
     }
 }
 
-impl Encoder<&bytes::Bytes> for NullableBytes {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: &bytes::Bytes) -> io::Result<()> {
+impl Encoder<&ByteBuffer> for NullableBytes {
+    fn encode<B: BufMut>(&self, buf: &mut B, value: &ByteBuffer) -> io::Result<()> {
         write_slice(buf, Some(value.as_ref()), self.0)
     }
 
-    fn calculate_size(&self, value: &bytes::Bytes) -> usize {
+    fn calculate_size(&self, value: &ByteBuffer) -> usize {
         slice_size(Some(value.as_ref()), self.0)
     }
 }
@@ -548,28 +548,23 @@ fn read_nullable_bytes<B: Readable>(
     buf: &mut B,
     len: i32,
     ty: &str,
-) -> io::Result<Option<bytes::Bytes>> {
+) -> io::Result<Option<ByteBuffer>> {
     match len {
         -1 => Ok(None),
         n if n >= 0 => {
             let n = n as usize;
-            let bs = read_exact_bytes_of(buf, n, ty)?;
-            Ok(Some(bs))
+            if buf.remaining() >= n {
+                Ok(Some(buf.read_bytes(n)))
+            } else {
+                Err(err_codec_message(format!(
+                    "no enough {n} bytes when decode {ty:?} (remaining: {})",
+                    buf.remaining()
+                )))
+            }
         }
         n => Err(err_codec_message(format!(
             "illegal length {n} when decode {ty}"
         ))),
-    }
-}
-
-fn read_exact_bytes_of<B: Readable>(buf: &mut B, n: usize, ty: &str) -> io::Result<bytes::Bytes> {
-    if buf.remaining() >= n {
-        Ok(buf.read_bytes(n))
-    } else {
-        Err(err_codec_message(format!(
-            "no enough {n} bytes when decode {ty:?} (remaining: {})",
-            buf.remaining()
-        )))
     }
 }
 

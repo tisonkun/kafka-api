@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{io, io::Cursor};
+use std::io;
 
 use crate::{
-    apikey::ApiMessageType, codec::*, request_header::RequestHeader,
+    apikey::ApiMessageType, bytebuffer::ByteBuffer, codec::*, request_header::RequestHeader,
     response_header::ResponseHeader,
 };
 
@@ -62,11 +62,11 @@ pub enum Request {
 }
 
 impl Request {
-    pub fn decode(buf: &mut bytes::BytesMut) -> io::Result<(RequestHeader, Request)> {
+    pub fn decode(buf: &mut ByteBuffer) -> io::Result<(RequestHeader, Request)> {
         let header_version = {
-            let mut cursor = Cursor::new(&buf[..]);
-            let api_key = Int16.decode(&mut cursor)?;
-            let api_version = Int16.decode(&mut cursor)?;
+            let mut buf = &buf[..];
+            let api_key = Int16.decode(&mut buf)?;
+            let api_version = Int16.decode(&mut buf)?;
             ApiMessageType::try_from(api_key)?.request_header_version(api_version)
         };
 

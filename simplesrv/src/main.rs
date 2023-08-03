@@ -21,7 +21,7 @@ use std::{
 };
 
 use bytes::Buf;
-use kafka_api::Request;
+use kafka_api::{bytebuffer::ByteBuffer, Request};
 use simplesrv::{Broker, BrokerMeta, ClientInfo, ClusterMeta};
 use tracing::{debug, error, error_span, info, Level};
 
@@ -82,7 +82,7 @@ fn dispatch(mut socket: TcpStream, broker: Arc<Mutex<Broker>>) -> io::Result<()>
         let mut buf = {
             let mut buf = vec![0u8; n];
             socket.read_exact(&mut buf)?;
-            bytes::BytesMut::from_iter(buf)
+            ByteBuffer::new(buf)
         };
 
         let (header, request) = Request::decode(&mut buf)?;
