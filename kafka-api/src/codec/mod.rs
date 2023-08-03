@@ -414,7 +414,7 @@ impl Encoder<Option<&ReadOnlyRecords>> for NullableRecords {
                 }
             }
             Some(r) => {
-                let len = r.len() as i16;
+                let len = r.size() as i16;
                 if self.0 {
                     VarInt.encode(buf, len as i32 + 1)?;
                 } else {
@@ -436,9 +436,9 @@ impl Encoder<Option<&ReadOnlyRecords>> for NullableRecords {
                 }
             }
             Some(r) => {
-                r.len()
+                r.size()
                     + if self.0 {
-                        VarInt.calculate_size(r.len() as i32 + 1)
+                        VarInt.calculate_size(r.size() as i32 + 1)
                     } else {
                         Int16::SIZE
                     }

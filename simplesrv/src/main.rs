@@ -23,7 +23,7 @@ use std::{
 use bytes::Buf;
 use kafka_api::{bytebuffer::ByteBuffer, sendable::SendBuilder, Request};
 use simplesrv::{Broker, BrokerMeta, ClientInfo, ClusterMeta};
-use tracing::{debug, error, error_span, info, trace, Level};
+use tracing::{debug, error, error_span, info, Level};
 
 fn main() -> io::Result<()> {
     tracing_subscriber::fmt()

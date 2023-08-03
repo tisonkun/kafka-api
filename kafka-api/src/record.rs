@@ -127,7 +127,7 @@ impl Default for ReadOnlyRecords {
 }
 
 impl ReadOnlyRecords {
-    pub fn len(&self) -> usize {
+    pub fn size(&self) -> usize {
         match self {
             ReadOnlyRecords::ByteBuffer(r) => r.buf.len(),
         }
