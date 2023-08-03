@@ -381,13 +381,13 @@ impl Broker {
             let mut partition_responses = vec![];
             for partition in topic.partition_data {
                 let idx = partition.index;
-                if let Some(records) = partition.records {
+                if let Some(mut records) = partition.records {
                     // TODO - return error on topic partition not exist
                     let (last_offset, store) = self
                         .topic_partition_store
                         .get_mut(&(topic_meta.topic_id, idx))
                         .unwrap();
-                    for batch in records.batches() {
+                    for batch in records.mut_batches() {
                         trace!("storing batch {batch:?} with last_offset {last_offset}");
                         *last_offset += batch.records_count() as i64;
                         batch.set_last_offset(*last_offset - 1);
@@ -577,20 +577,15 @@ impl Broker {
                     .expect("partition not found");
                 let committed_index = partition.0;
                 let fetch_offset = part.fetch_offset;
-                let records = partition
-                    .1
-                    .iter()
-                    .skip_while(|r| {
-                        for batch in r.batches() {
-                            let last_offset =
-                                batch.base_offset() + batch.last_offset_delta() as i64;
-                            if last_offset >= fetch_offset {
-                                return false;
-                            }
+                let records = partition.1.iter().find(|r| {
+                    for batch in r.batches() {
+                        let last_offset = batch.base_offset() + batch.last_offset_delta() as i64;
+                        if last_offset >= fetch_offset {
+                            return false;
                         }
-                        true
-                    })
-                    .next();
+                    }
+                    true
+                });
                 partitions.push(PartitionData {
                     partition_index: idx,
                     high_watermark: committed_index,
