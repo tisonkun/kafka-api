@@ -57,6 +57,49 @@ pub struct RawTaggedField {
     pub data: bytes::Bytes,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub(super) struct RawTaggedFieldWriter;
+
+impl RawTaggedFieldWriter {
+    pub(super) fn write_field<
+        B: BufMut,
+        T: Copy, // primitive or reference
+        E: Encoder<T>,
+    >(
+        &self,
+        buf: &mut B,
+        tag: i32,
+        encoder: E,
+        value: T,
+    ) -> io::Result<()> {
+        VarInt.encode(buf, tag)?;
+        VarInt.encode(buf, encoder.calculate_size(value) as i32)?;
+        encoder.encode(buf, value)?;
+        Ok(())
+    }
+
+    pub(super) fn calculate_field_size<T, E: Encoder<T>>(
+        &self,
+        tag: i32,
+        encoder: E,
+        value: T,
+    ) -> usize {
+        let size = encoder.calculate_size(value);
+        let mut res = 0;
+        res += VarInt.calculate_size(tag);
+        res += VarInt.calculate_size(size as i32);
+        res + size
+    }
+
+    fn write_bytes<B: BufMut>(&self, buf: &mut B, tag: i32, bs: &[u8]) -> io::Result<()> {
+        VarInt.encode(buf, tag)?;
+        VarInt.encode(buf, bs.len() as i32)?;
+        buf.put_slice(bs);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
 pub(super) struct RawTaggedFieldList;
 
 impl RawTaggedFieldList {
@@ -101,9 +144,7 @@ impl RawTaggedFieldList {
         VarInt.encode(buf, (fields.len() + n) as i32)?;
         f(buf)?;
         for field in fields {
-            VarInt.encode(buf, field.tag)?;
-            VarInt.encode(buf, field.data.len() as i32)?;
-            buf.put_slice(&field.data);
+            RawTaggedFieldWriter.write_bytes(buf, field.tag, field.data.as_ref())?;
         }
         Ok(())
     }

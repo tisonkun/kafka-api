@@ -75,6 +75,36 @@ impl Serializable for FindCoordinatorResponse {
         }
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        if version >= 1 {
+            res += Int32.fixed_size(/* self.throttle_time_ms */);
+        }
+        if version <= 3 {
+            res += Int16.fixed_size(/* self.error_code */);
+        }
+        if (1..=3).contains(&version) {
+            res += NullableString(version >= 3).calculate_size(self.error_message.as_deref());
+        }
+        if version <= 3 {
+            res += Int32.fixed_size(/* self.node_id */);
+        }
+        if version <= 3 {
+            res += NullableString(version >= 3).calculate_size(self.host.as_str());
+        }
+        if version <= 3 {
+            res += Int32.fixed_size(/* self.port */);
+        }
+        if version >= 4 {
+            res +=
+                NullableArray(Struct(version), true).calculate_size(self.coordinators.as_slice());
+        }
+        if version >= 3 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
+    }
 }
 
 #[derive(Debug, Default, Clone)]

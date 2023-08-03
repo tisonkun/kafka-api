@@ -183,19 +183,13 @@ impl Serializable for PartitionData {
             n += self.snapshot_id.is_some() as usize;
             RawTaggedFieldList.encode_with(buf, n, &self.unknown_tagged_fields, |buf| {
                 if let Some(diverging_epoch) = &self.diverging_epoch {
-                    VarInt.encode(buf, 0)?;
-                    VarInt.encode(buf, Struct(version).calculate_size(diverging_epoch) as i32)?;
-                    Struct(version).encode(buf, diverging_epoch)?;
+                    RawTaggedFieldWriter.write_field(buf, 0, Struct(version), diverging_epoch)?;
                 }
                 if let Some(current_leader) = &self.current_leader {
-                    VarInt.encode(buf, 1)?;
-                    VarInt.encode(buf, Struct(version).calculate_size(current_leader) as i32)?;
-                    Struct(version).encode(buf, current_leader)?;
+                    RawTaggedFieldWriter.write_field(buf, 1, Struct(version), current_leader)?;
                 }
                 if let Some(snapshot_id) = &self.snapshot_id {
-                    VarInt.encode(buf, 2)?;
-                    VarInt.encode(buf, Struct(version).calculate_size(snapshot_id) as i32)?;
-                    Struct(version).encode(buf, snapshot_id)?;
+                    RawTaggedFieldWriter.write_field(buf, 2, Struct(version), snapshot_id)?;
                 }
                 Ok(())
             })?;

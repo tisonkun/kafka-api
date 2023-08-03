@@ -61,34 +61,53 @@ impl Serializable for ApiVersionsResponse {
         }
         if version >= 3 {
             RawTaggedFieldList.encode_with(buf, 3, &self.unknown_tagged_fields, |buf| {
-                VarInt.encode(buf, 0)?;
-                VarInt.encode(
+                RawTaggedFieldWriter.write_field(
                     buf,
-                    NullableArray(Struct(version), version >= 3)
-                        .calculate_size(self.supported_features.as_slice())
-                        as i32,
+                    0,
+                    NullableArray(Struct(version), version >= 3),
+                    self.supported_features.as_slice(),
                 )?;
-                NullableArray(Struct(version), version >= 3)
-                    .encode(buf, self.supported_features.as_slice())?;
-                VarInt.encode(buf, 1)?;
-                VarInt.encode(
+                RawTaggedFieldWriter.write_field(buf, 1, Int64, self.finalized_features_epoch)?;
+                RawTaggedFieldWriter.write_field(
                     buf,
-                    Int64.fixed_size(/* self.finalized_features_epoch */) as i32,
+                    2,
+                    NullableArray(Struct(version), version >= 3),
+                    self.finalized_features.as_slice(),
                 )?;
-                Int64.encode(buf, self.finalized_features_epoch)?;
-                VarInt.encode(buf, 2)?;
-                VarInt.encode(
-                    buf,
-                    NullableArray(Struct(version), version >= 3)
-                        .calculate_size(self.finalized_features.as_slice())
-                        as i32,
-                )?;
-                NullableArray(Struct(version), version >= 3)
-                    .encode(buf, self.finalized_features.as_slice())?;
                 Ok(())
             })?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int16.fixed_size(/* self.error_code */);
+        res +=
+            NullableArray(Struct(version), version >= 3).calculate_size(self.api_keys.as_slice());
+        if version >= 1 {
+            res += Int32.fixed_size(/* self.throttle_time_ms */);
+        }
+        if version >= 3 {
+            res += RawTaggedFieldList.calculate_size_with(
+                3,
+                RawTaggedFieldWriter.calculate_field_size(
+                    0,
+                    NullableArray(Struct(version), version >= 3),
+                    self.supported_features.as_slice(),
+                ) + RawTaggedFieldWriter.calculate_field_size(
+                    1,
+                    Int64,
+                    &self.finalized_features_epoch,
+                ) + RawTaggedFieldWriter.calculate_field_size(
+                    2,
+                    NullableArray(Struct(version), version >= 3),
+                    self.finalized_features.as_slice(),
+                ),
+                &self.unknown_tagged_fields,
+            );
+        }
+        res
     }
 }
 

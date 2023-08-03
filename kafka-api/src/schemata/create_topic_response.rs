@@ -98,16 +98,36 @@ impl Serializable for CreatableTopicResult {
         }
         if version >= 5 {
             RawTaggedFieldList.encode_with(buf, 1, &self.unknown_tagged_fields, |buf| {
-                VarInt.encode(buf, 0)?;
-                VarInt.encode(
-                    buf,
-                    Int16.calculate_size(self.topic_config_error_code) as i32,
-                )?;
-                Int16.encode(buf, self.topic_config_error_code)?;
+                RawTaggedFieldWriter.write_field(buf, 0, Int16, self.topic_config_error_code)?;
                 Ok(())
             })?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += NullableString(version >= 5).calculate_size(self.name.as_str());
+        if version >= 7 {
+            res += Uuid.fixed_size(/* self.topic_id */);
+        }
+        res += Int16.fixed_size(/* self.error_code */);
+        if version >= 1 {
+            res += NullableString(version >= 5).calculate_size(self.error_message.as_deref());
+        }
+        if version >= 5 {
+            res += Int32.fixed_size(/* self.num_partitions */);
+            res += Int16.fixed_size(/* self.replication_factor */);
+            res += NullableArray(Struct(version), true).calculate_size(self.configs.as_slice());
+        }
+        if version >= 5 {
+            res += RawTaggedFieldList.calculate_size_with(
+                1,
+                RawTaggedFieldWriter.calculate_field_size(0, Int16, &self.topic_config_error_code),
+                &self.unknown_tagged_fields,
+            );
+        }
+        res
     }
 }
 
