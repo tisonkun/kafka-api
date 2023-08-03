@@ -54,6 +54,19 @@ impl Serializable for ProduceResponse {
         }
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res +=
+            NullableArray(Struct(version), version >= 9).calculate_size(self.responses.as_slice());
+        if version > 1 {
+            res += Int32.calculate_size(self.throttle_time_ms);
+        }
+        if version >= 9 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -75,6 +88,17 @@ impl Serializable for TopicProduceResponse {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += NullableString(version >= 9).calculate_size(self.name.as_str());
+        res += NullableArray(Struct(version), version >= 9)
+            .calculate_size(self.partition_responses.as_slice());
+        if version >= 9 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }
 
@@ -124,6 +148,30 @@ impl Serializable for PartitionProduceResponse {
         }
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int32.calculate_size(self.index);
+        res += Int16.calculate_size(self.error_code);
+        res += Int64.calculate_size(self.base_offset);
+        if version >= 2 {
+            res += Int64.calculate_size(self.log_append_time_ms);
+        }
+        if version >= 5 {
+            res += Int64.calculate_size(self.log_start_offset);
+        }
+        if version >= 8 {
+            res += NullableArray(Struct(version), version >= 9)
+                .calculate_size(self.record_errors.as_slice());
+        }
+        if version >= 8 {
+            res += NullableString(version >= 9).calculate_size(self.error_message.as_deref());
+        }
+        if version >= 9 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -150,5 +198,16 @@ impl Serializable for BatchIndexAndErrorMessage {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int32::SIZE; // self.batch_index
+        res +=
+            NullableString(version >= 9).calculate_size(self.batch_index_error_message.as_deref());
+        if version >= 9 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }

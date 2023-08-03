@@ -55,6 +55,18 @@ impl Serializable for CreateTopicsResponse {
         }
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        if version >= 2 {
+            res += Int32.calculate_size(self.throttle_time_ms);
+        }
+        res += NullableArray(Struct(version), version >= 5).calculate_size(self.topics.as_slice());
+        if version >= 5 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -160,5 +172,16 @@ impl Serializable for CreatableTopicConfigs {
         Bool.encode(buf, self.is_sensitive)?;
         RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         Ok(())
+    }
+
+    fn calculate_size(&self, _version: i16) -> usize {
+        let mut res = 0;
+        res += NullableString(true).calculate_size(self.name.as_str());
+        res += NullableString(true).calculate_size(self.value.as_deref());
+        res += Bool::SIZE; // self.read_only
+        res += Int8::SIZE; // self.config_source
+        res += Bool::SIZE; // self.is_sensitive
+        res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        res
     }
 }

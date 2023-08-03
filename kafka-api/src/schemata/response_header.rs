@@ -34,4 +34,13 @@ impl Serializable for ResponseHeader {
         }
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int32::SIZE; // self.correlation_id
+        if version >= 1 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
+    }
 }

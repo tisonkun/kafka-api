@@ -61,4 +61,21 @@ impl Serializable for SyncGroupResponse {
         }
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        if version >= 1 {
+            res += Int32.calculate_size(self.throttle_time_ms);
+        }
+        res += Int16.calculate_size(self.error_code);
+        if version >= 5 {
+            res += NullableString(true).calculate_size(self.protocol_type.as_deref());
+            res += NullableString(true).calculate_size(self.protocol_name.as_deref());
+        }
+        res += NullableBytes(version >= 4).calculate_size(&self.assignment);
+        if version >= 4 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
+    }
 }

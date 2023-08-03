@@ -14,7 +14,7 @@
 
 use std::io;
 
-use crate::{codec::*, err_decode_message_null};
+use crate::{codec::*, err_encode_message_null};
 
 // Version 1 adds fields for the rack of each broker, the controller id, and
 // whether or not the topic is internal.
@@ -79,9 +79,31 @@ impl Serializable for MetadataResponse {
             Int32.encode(buf, self.cluster_authorized_operations)?;
         }
         if version >= 9 {
-            RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?
+            RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        if version >= 3 {
+            res += Int32.calculate_size(self.throttle_time_ms);
+        }
+        res += NullableArray(Struct(version), version >= 9).calculate_size(self.brokers.as_slice());
+        if version >= 2 {
+            res += NullableString(version >= 9).calculate_size(self.cluster_id.as_deref());
+        }
+        if version >= 1 {
+            res += Int32.calculate_size(self.controller_id);
+        }
+        res += NullableArray(Struct(version), version >= 9).calculate_size(self.topics.as_slice());
+        if (8..=10).contains(&version) {
+            res += Int32.calculate_size(self.cluster_authorized_operations);
+        }
+        if version >= 9 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }
 
@@ -108,9 +130,23 @@ impl Serializable for MetadataResponseBroker {
             NullableString(version >= 9).encode(buf, self.rack.as_deref())?;
         }
         if version >= 9 {
-            RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?
+            RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int32.calculate_size(self.node_id);
+        res += NullableString(version >= 9).calculate_size(self.host.as_str());
+        res += Int32.calculate_size(self.port);
+        if version >= 1 {
+            res += NullableString(version >= 9).calculate_size(self.rack.as_deref());
+        }
+        if version >= 9 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }
 
@@ -140,7 +176,7 @@ impl Serializable for MetadataResponseTopic {
                 if version >= 12 {
                     NullableString(true).encode(buf, None)?;
                 } else {
-                    Err(err_decode_message_null("name"))?;
+                    Err(err_encode_message_null("name"))?;
                 }
             }
             Some(ref name) => {
@@ -158,9 +194,30 @@ impl Serializable for MetadataResponseTopic {
             Int32.encode(buf, self.topic_authorized_operations)?;
         }
         if version >= 9 {
-            RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?
+            RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int16.calculate_size(self.error_code);
+        res += NullableString(version >= 9).calculate_size(self.name.as_deref());
+        if version >= 10 {
+            res += Uuid.calculate_size(self.topic_id);
+        }
+        if version >= 1 {
+            res += Bool.calculate_size(self.is_internal);
+        }
+        res +=
+            NullableArray(Struct(version), version >= 9).calculate_size(self.partitions.as_slice());
+        if version >= 8 {
+            res += Int32.calculate_size(self.topic_authorized_operations);
+        }
+        if version >= 9 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }
 
@@ -198,8 +255,28 @@ impl Serializable for MetadataResponsePartition {
             NullableArray(Int32, version >= 9).encode(buf, self.offline_replicas.as_slice())?;
         }
         if version >= 9 {
-            RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?
+            RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int16.calculate_size(self.error_code);
+        res += Int32.calculate_size(self.partition_index);
+        res += Int32.calculate_size(self.leader_id);
+        if version >= 7 {
+            res += Int32.calculate_size(self.leader_epoch);
+        }
+        res += NullableArray(Int32, version >= 9).calculate_size(self.replica_nodes.as_slice());
+        res += NullableArray(Int32, version >= 9).calculate_size(self.isr_nodes.as_slice());
+        if version >= 5 {
+            res +=
+                NullableArray(Int32, version >= 9).calculate_size(self.offline_replicas.as_slice());
+        }
+        if version >= 9 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }

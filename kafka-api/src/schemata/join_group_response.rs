@@ -84,6 +84,29 @@ impl Serializable for JoinGroupResponse {
         }
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        if version >= 2 {
+            res += Int32.calculate_size(self.throttle_time_ms);
+        }
+        res += Int16.calculate_size(self.error_code);
+        res += Int32.calculate_size(self.generation_id);
+        if version >= 7 {
+            res += NullableString(true).calculate_size(self.protocol_type.as_deref());
+        }
+        res += NullableString(version >= 6).calculate_size(self.protocol_name.as_deref());
+        res += NullableString(version >= 6).calculate_size(self.leader.as_str());
+        if version >= 9 {
+            res += Bool.calculate_size(self.skip_assignment);
+        }
+        res += NullableString(version >= 6).calculate_size(self.member_id.as_str());
+        res += NullableArray(Struct(version), version >= 6).calculate_size(self.members.as_slice());
+        if version >= 6 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -109,5 +132,18 @@ impl Serializable for JoinGroupResponseMember {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += NullableString(version >= 6).calculate_size(self.member_id.as_str());
+        if version >= 5 {
+            res += NullableString(version >= 6).calculate_size(self.group_instance_id.as_deref());
+        }
+        res += NullableBytes(version >= 6).calculate_size(&self.metadata);
+        if version >= 6 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }

@@ -66,6 +66,27 @@ impl Serializable for OffsetFetchResponse {
         }
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        if version >= 3 {
+            res += Int32.calculate_size(self.throttle_time_ms);
+        }
+        if version <= 7 {
+            res +=
+                NullableArray(Struct(version), version >= 6).calculate_size(self.topics.as_slice());
+        }
+        if (2..=7).contains(&version) {
+            res += Int16.calculate_size(self.error_code);
+        }
+        if version >= 8 {
+            res += NullableArray(Struct(version), true).calculate_size(self.groups.as_slice());
+        }
+        if version >= 6 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -92,6 +113,17 @@ impl Serializable for OffsetFetchResponseTopic {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += NullableString(version >= 6).calculate_size(self.name.as_str());
+        res +=
+            NullableArray(Struct(version), version >= 6).calculate_size(self.partitions.as_slice());
+        if version >= 6 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }
 
@@ -125,6 +157,21 @@ impl Serializable for OffsetFetchResponsePartition {
         }
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int32.calculate_size(self.partition_index);
+        res += Int32.calculate_size(self.committed_offset);
+        if version >= 5 {
+            res += Int32.calculate_size(self.committed_leader_epoch);
+        }
+        res += NullableString(version >= 6).calculate_size(self.metadata.as_deref());
+        res += Int16.calculate_size(self.error_code);
+        if version >= 6 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -153,6 +200,15 @@ impl Serializable for OffsetFetchResponseGroup {
         RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += NullableString(true).calculate_size(self.group_id.as_str());
+        res += NullableArray(Struct(version), true).calculate_size(self.topics.as_slice());
+        res += Int16.calculate_size(self.error_code);
+        res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        res
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -171,6 +227,14 @@ impl Serializable for OffsetFetchResponseTopics {
         NullableArray(Struct(version), true).encode(buf, self.partitions.as_slice())?;
         RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += NullableString(true).calculate_size(self.name.as_str());
+        res += NullableArray(Struct(version), true).calculate_size(self.partitions.as_slice());
+        res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        res
     }
 }
 
@@ -199,5 +263,16 @@ impl Serializable for OffsetFetchResponsePartitions {
         Int16.encode(buf, self.error_code)?;
         RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int32.calculate_size(self.partition_index);
+        res += Int64.calculate_size(self.committed_offset);
+        res += Int32.calculate_size(self.committed_leader_epoch);
+        res += NullableString(true).calculate_size(self.metadata.as_deref());
+        res += Int16.calculate_size(self.error_code);
+        res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        res
     }
 }

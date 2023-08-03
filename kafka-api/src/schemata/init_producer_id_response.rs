@@ -50,4 +50,16 @@ impl Serializable for InitProducerIdResponse {
         }
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int32::SIZE; // self.throttle_time_ms
+        res += Int16::SIZE; // self.error_code
+        res += Int64::SIZE; // self.producer_id
+        res += Int16::SIZE; // self.producer_epoch
+        if version >= 2 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
+    }
 }

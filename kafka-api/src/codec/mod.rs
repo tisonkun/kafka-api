@@ -44,10 +44,7 @@ pub trait Deserializable: Sized {
 pub trait Serializable: Sized {
     fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()>;
 
-    fn calculate_size(&self, version: i16) -> usize {
-        let _ = version;
-        todo!("calculate size for responses")
-    }
+    fn calculate_size(&self, version: i16) -> usize;
 }
 
 #[derive(Debug, Default, Clone)]
