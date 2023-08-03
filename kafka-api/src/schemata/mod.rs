@@ -15,7 +15,7 @@
 use std::io;
 
 use crate::{
-    apikey::ApiMessageType, codec::*, request_header::RequestHeader,
+    apikey::ApiMessageType, bytebuffer::ByteBuffer, codec::*, request_header::RequestHeader,
     response_header::ResponseHeader,
 };
 
@@ -62,7 +62,7 @@ pub enum Request {
 }
 
 impl Request {
-    pub fn decode(buf: &mut bytes::BytesMut) -> io::Result<(RequestHeader, Request)> {
+    pub fn decode(buf: &mut ByteBuffer) -> io::Result<(RequestHeader, Request)> {
         let header_version = {
             let mut buf = &buf[..];
             let api_key = Int16.decode(&mut buf)?;

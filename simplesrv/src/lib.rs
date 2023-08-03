@@ -22,6 +22,7 @@ use kafka_api::{
     api_versions_request::ApiVersionsRequest,
     api_versions_response::{ApiVersion, ApiVersionsResponse},
     apikey::ApiMessageType,
+    bytebuffer::ByteBuffer,
     create_topic_request::CreateTopicsRequest,
     create_topic_response::{CreatableTopicResult, CreateTopicsResponse},
     error::Error,
@@ -157,7 +158,7 @@ impl GroupMeta {
             .collect()
     }
 
-    fn sync(&mut self, assignments: BTreeMap<String, bytes::Bytes>) {
+    fn sync(&mut self, assignments: BTreeMap<String, ByteBuffer>) {
         for member in self.members.values_mut() {
             let assignment = assignments
                 .get(&member.member_id)
@@ -176,8 +177,8 @@ struct MemberMeta {
     client_id: String,
     client_host: String,
     protocol_type: String,
-    protocols: BTreeMap<String, bytes::Bytes>,
-    assignment: bytes::Bytes,
+    protocols: BTreeMap<String, ByteBuffer>,
+    assignment: ByteBuffer,
     rebalance_timeout_ms: i32,
     session_timeout_ms: i32,
 }
@@ -477,7 +478,7 @@ impl Broker {
                 .cloned()
                 .map(|p| (p.name, p.metadata))
                 .collect(),
-            assignment: bytes::Bytes::new(),
+            assignment: ByteBuffer::default(),
             rebalance_timeout_ms: request.rebalance_timeout_ms,
             session_timeout_ms: request.session_timeout_ms,
         };
@@ -514,7 +515,7 @@ impl Broker {
             .iter()
             .cloned()
             .map(|assign| (assign.member_id, assign.assignment))
-            .collect::<BTreeMap<String, bytes::Bytes>>();
+            .collect::<BTreeMap<String, ByteBuffer>>();
         let group = self
             .group_coordinator
             .groups

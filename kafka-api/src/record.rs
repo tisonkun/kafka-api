@@ -187,18 +187,18 @@ pub struct Record {
     pub timestamp_delta: i64, // varlong
     pub offset_delta: i32,    // varint
     pub key_len: i32,         // varint
-    pub key: Option<bytes::Bytes>,
+    pub key: Option<ByteBuffer>,
     pub value_len: i32, // varint
-    pub value: Option<bytes::Bytes>,
+    pub value: Option<ByteBuffer>,
     pub headers: Vec<Header>,
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct Header {
     pub key_len: i32, // varint
-    pub key: Option<bytes::Bytes>,
+    pub key: Option<ByteBuffer>,
     pub value_len: i32, // varint
-    pub value: Option<bytes::Bytes>,
+    pub value: Option<ByteBuffer>,
 }
 
 #[cfg(test)]

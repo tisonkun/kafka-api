@@ -14,7 +14,9 @@
 
 use std::io;
 
-use crate::{codec::*, err_decode_message_null, err_decode_message_unsupported};
+use crate::{
+    bytebuffer::ByteBuffer, codec::*, err_decode_message_null, err_decode_message_unsupported,
+};
 
 // Version 1 adds RebalanceTimeoutMs.
 //
@@ -94,7 +96,7 @@ pub struct JoinGroupRequestProtocol {
     /// The protocol name.
     pub name: String,
     /// The protocol metadata.
-    pub metadata: bytes::Bytes,
+    pub metadata: ByteBuffer,
     /// Unknown tagged fields.
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }

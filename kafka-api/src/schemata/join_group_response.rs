@@ -16,7 +16,7 @@ use std::io;
 
 use bytes::BufMut;
 
-use crate::{codec::*, err_encode_message_null};
+use crate::{bytebuffer::ByteBuffer, codec::*, err_encode_message_null};
 
 // Version 1 is the same as version 0.
 //
@@ -95,7 +95,7 @@ pub struct JoinGroupResponseMember {
     /// The unique identifier of the consumer instance provided by end user.
     pub group_instance_id: Option<String>,
     /// The group member metadata.
-    pub metadata: bytes::Bytes,
+    pub metadata: ByteBuffer,
     /// Unknown tagged fields.
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }

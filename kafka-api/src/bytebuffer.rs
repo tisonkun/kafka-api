@@ -30,6 +30,18 @@ pub struct ByteBuffer {
     shared: Arc<Shared>,
 }
 
+impl PartialEq for ByteBuffer {
+    fn eq(&self, other: &ByteBuffer) -> bool {
+        self.as_ref() == other.as_ref()
+    }
+}
+
+impl From<&str> for ByteBuffer {
+    fn from(value: &str) -> Self {
+        ByteBuffer::new(value.as_bytes().to_vec())
+    }
+}
+
 impl Default for ByteBuffer {
     fn default() -> Self {
         ByteBuffer::new(vec![])
