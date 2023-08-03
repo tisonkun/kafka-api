@@ -162,24 +162,8 @@ macro_rules! delegate_forward_buf {
 impl Readable for &[u8] {
     delegate_forward_buf!();
 
-    fn read_bytes(&mut self, len: usize) -> ByteBuffer {
-        ByteBuffer::new(self.copy_to_bytes(len).to_vec())
-    }
-}
-
-impl Readable for bytes::Bytes {
-    delegate_forward_buf!();
-
-    fn read_bytes(&mut self, len: usize) -> ByteBuffer {
-        ByteBuffer::new(self.copy_to_bytes(len).to_vec())
-    }
-}
-
-impl Readable for bytes::BytesMut {
-    delegate_forward_buf!();
-
-    fn read_bytes(&mut self, len: usize) -> ByteBuffer {
-        ByteBuffer::new(self.copy_to_bytes(len).to_vec())
+    fn read_bytes(&mut self, _: usize) -> ByteBuffer {
+        unreachable!("this implementation is only for peeking size")
     }
 }
 
