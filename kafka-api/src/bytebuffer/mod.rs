@@ -13,30 +13,20 @@
 // limitations under the License.
 
 use core::slice;
-use std::{
-    fmt::Debug,
-    mem::ManuallyDrop,
-    ops::{Deref, RangeBounds},
-    ptr::drop_in_place,
-    sync::Arc,
-};
+use std::{fmt::Debug, mem::ManuallyDrop, ops::RangeBounds, ptr::drop_in_place, sync::Arc};
 
 use bytes::Buf;
 
 mod format;
+mod impl_traits;
 
-#[derive(Clone)]
-pub struct ByteBuffer {
-    start: usize,
-    end: usize,
-    shared: Arc<Shared>,
-}
-
+// Shared represents a deallocate guard
 #[derive(Debug, Clone)]
 struct Shared {
     ptr: *mut u8,
 }
 
+// shared ptr never changed + no alloc + in place mutations are managed
 unsafe impl Send for Shared {}
 unsafe impl Sync for Shared {}
 
@@ -46,13 +36,26 @@ impl Drop for Shared {
     }
 }
 
+#[derive(Clone)]
+pub struct ByteBuffer {
+    start: usize,
+    end: usize,
+    shared: Arc<Shared>,
+}
+
+impl Default for ByteBuffer {
+    fn default() -> Self {
+        ByteBuffer::new(vec![])
+    }
+}
+
 impl Buf for ByteBuffer {
     fn remaining(&self) -> usize {
         self.len()
     }
 
     fn chunk(&self) -> &[u8] {
-        unsafe { slice::from_raw_parts_mut(self.ptr(), self.len()) }
+        self.as_slice()
     }
 
     fn advance(&mut self, cnt: usize) {
@@ -132,12 +135,16 @@ impl ByteBuffer {
         }
     }
 
+    pub fn as_slice(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts_mut(self.ptr(), self.len()) }
+    }
+
     // SAFETY - modifications are nonoverlapping
     //
     // We cannot implement AsMut / DerefMut for this conventions, cause impl trait will be public
     // visible, but we need to narrow the mutations within this crate (for in place mutate memory
     // batches).
-    pub(crate) fn chunk_mut_in(&mut self, range: impl RangeBounds<usize>) -> &mut [u8] {
+    pub(crate) fn mut_slice_in(&mut self, range: impl RangeBounds<usize>) -> &mut [u8] {
         let (begin, end) = self.check_range(range);
         &mut (unsafe { slice::from_raw_parts_mut(self.ptr(), self.len()) }[begin..end])
     }
@@ -175,39 +182,8 @@ impl ByteBuffer {
         (begin, end)
     }
 
+    // SAFETY - always in bound
     unsafe fn ptr(&self) -> *mut u8 {
         self.shared.ptr.add(self.start)
-    }
-}
-
-impl Default for ByteBuffer {
-    fn default() -> Self {
-        ByteBuffer::new(vec![])
-    }
-}
-
-impl AsRef<[u8]> for ByteBuffer {
-    fn as_ref(&self) -> &[u8] {
-        self.chunk()
-    }
-}
-
-impl Deref for ByteBuffer {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        self.chunk()
-    }
-}
-
-impl From<&str> for ByteBuffer {
-    fn from(value: &str) -> Self {
-        ByteBuffer::new(value.as_bytes().to_vec())
-    }
-}
-
-impl PartialEq for ByteBuffer {
-    fn eq(&self, other: &ByteBuffer) -> bool {
-        self.as_ref() == other.as_ref()
     }
 }

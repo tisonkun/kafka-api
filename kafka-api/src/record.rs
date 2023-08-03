@@ -159,7 +159,7 @@ impl RecordBatch {
     pub fn set_last_offset(&mut self, offset: i64) {
         let base_offset = offset - self.last_offset_delta() as i64;
         self.buf
-            .chunk_mut_in(BASE_OFFSET_OFFSET..)
+            .mut_slice_in(BASE_OFFSET_OFFSET..)
             .put_i64(base_offset);
     }
 
@@ -252,7 +252,10 @@ mod tests {
         assert_eq!(record.key_len, -1);
         assert_eq!(record.key, None);
         assert_eq!(record.value_len, 26);
-        assert_eq!(record.value, Some("This is the first message.".into()));
+        assert_eq!(
+            record.value.as_deref().map(String::from_utf8_lossy),
+            Some("This is the first message.".into())
+        );
         Ok(())
     }
 }
