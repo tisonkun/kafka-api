@@ -19,6 +19,7 @@ use std::{
 };
 
 use bytes::{Buf, BufMut};
+use tracing::warn;
 
 use crate::{
     bytebuffer::ByteBuffer,
@@ -63,16 +64,21 @@ pub struct Records {
     batches: OnceCell<Vec<RecordBatch>>,
 }
 
-impl AsRef<[u8]> for Records {
-    fn as_ref(&self) -> &[u8] {
-        &self.buf
-    }
-}
-
 impl Clone for Records {
+    /// ATTENTION - Cloning Records is a heavy operation.
+    ///
+    /// Records is a public struct and it has a [Records::mut_batches] method that modifies the
+    /// underlying [ByteBuffer]. If we only do a shallow clone, then two Records that doesn't have
+    /// any ownership overlapping can modify the same underlying slice.
+    ///
+    /// Generally, Records users iterate over batches with [Records::batches] or
+    /// [Records::mut_batches], and pass ownership instead of clone Records.
+    ///
+    /// This clone behavior is similar to clone a [Vec].
     fn clone(&self) -> Self {
+        warn!("Cloning records is a heavy operation and not encouraged.");
         Records {
-            buf: self.buf.clone(),
+            buf: ByteBuffer::new(self.buf.to_vec()),
             batches: OnceCell::new(),
         }
     }
@@ -88,6 +94,10 @@ impl Records {
     pub fn new(buf: ByteBuffer) -> Self {
         let batches = OnceCell::new();
         Records { buf, batches }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        self.buf.as_bytes()
     }
 
     pub fn mut_batches(&mut self) -> IterMut<'_, RecordBatch> {

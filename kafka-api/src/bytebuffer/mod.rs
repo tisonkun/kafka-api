@@ -55,7 +55,7 @@ impl Buf for ByteBuffer {
     }
 
     fn chunk(&self) -> &[u8] {
-        self.as_slice()
+        self.as_bytes()
     }
 
     fn advance(&mut self, cnt: usize) {
@@ -135,7 +135,7 @@ impl ByteBuffer {
         }
     }
 
-    pub fn as_slice(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         unsafe { slice::from_raw_parts_mut(self.ptr(), self.len()) }
     }
 

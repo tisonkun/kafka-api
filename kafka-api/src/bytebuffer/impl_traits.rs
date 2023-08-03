@@ -23,7 +23,7 @@ impl hash::Hash for ByteBuffer {
     where
         H: hash::Hasher,
     {
-        self.as_slice().hash(state);
+        self.as_bytes().hash(state);
     }
 }
 
@@ -31,13 +31,13 @@ impl hash::Hash for ByteBuffer {
 
 impl AsRef<[u8]> for ByteBuffer {
     fn as_ref(&self) -> &[u8] {
-        self.as_slice()
+        self.as_bytes()
     }
 }
 
 impl Borrow<[u8]> for ByteBuffer {
     fn borrow(&self) -> &[u8] {
-        self.as_slice()
+        self.as_bytes()
     }
 }
 
@@ -45,7 +45,7 @@ impl Deref for ByteBuffer {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        self.as_slice()
+        self.as_bytes()
     }
 }
 
@@ -65,7 +65,7 @@ impl PartialOrd for ByteBuffer {
 
 impl Ord for ByteBuffer {
     fn cmp(&self, other: &ByteBuffer) -> cmp::Ordering {
-        self.as_slice().cmp(other.as_slice())
+        self.as_bytes().cmp(other.as_bytes())
     }
 }
 
@@ -73,13 +73,13 @@ impl Eq for ByteBuffer {}
 
 impl PartialEq<[u8]> for ByteBuffer {
     fn eq(&self, other: &[u8]) -> bool {
-        self.as_slice() == other
+        self.as_bytes() == other
     }
 }
 
 impl PartialOrd<[u8]> for ByteBuffer {
     fn partial_cmp(&self, other: &[u8]) -> Option<cmp::Ordering> {
-        self.as_slice().partial_cmp(other)
+        self.as_bytes().partial_cmp(other)
     }
 }
 
@@ -97,13 +97,13 @@ impl PartialOrd<ByteBuffer> for [u8] {
 
 impl PartialEq<str> for ByteBuffer {
     fn eq(&self, other: &str) -> bool {
-        self.as_slice() == other.as_bytes()
+        self.as_bytes() == other.as_bytes()
     }
 }
 
 impl PartialOrd<str> for ByteBuffer {
     fn partial_cmp(&self, other: &str) -> Option<cmp::Ordering> {
-        self.as_slice().partial_cmp(other.as_bytes())
+        self.as_bytes().partial_cmp(other.as_bytes())
     }
 }
 
@@ -127,7 +127,7 @@ impl PartialEq<Vec<u8>> for ByteBuffer {
 
 impl PartialOrd<Vec<u8>> for ByteBuffer {
     fn partial_cmp(&self, other: &Vec<u8>) -> Option<cmp::Ordering> {
-        self.as_slice().partial_cmp(&other[..])
+        self.as_bytes().partial_cmp(&other[..])
     }
 }
 
@@ -151,7 +151,7 @@ impl PartialEq<String> for ByteBuffer {
 
 impl PartialOrd<String> for ByteBuffer {
     fn partial_cmp(&self, other: &String) -> Option<cmp::Ordering> {
-        self.as_slice().partial_cmp(other.as_bytes())
+        self.as_bytes().partial_cmp(other.as_bytes())
     }
 }
 

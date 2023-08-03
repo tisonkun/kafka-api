@@ -30,6 +30,7 @@ name = "kafka-api"
 version = "0.2.3"
 dependencies = [
  "bytes",
+ "tracing",
  "uuid",
 ]
 

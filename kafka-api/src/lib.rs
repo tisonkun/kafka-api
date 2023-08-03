@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate core;
+
 use std::{fmt::Display, io};
 
 pub use codec::{Deserializable, RawTaggedField, Readable, Serializable};
@@ -23,6 +25,7 @@ pub(crate) mod codec;
 pub mod error;
 pub mod record;
 mod schemata;
+pub mod sendable;
 
 #[allow(unused)]
 fn err_io_other<E>(error: E) -> io::Error

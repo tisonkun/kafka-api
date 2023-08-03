@@ -24,6 +24,7 @@ use crate::{
 };
 
 pub mod readable;
+pub mod writable;
 
 pub trait Decoder<T: Sized> {
     fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<T>;
@@ -144,7 +145,7 @@ impl RawTaggedFieldList {
         VarInt.encode(buf, (fields.len() + n) as i32)?;
         f(buf)?;
         for field in fields {
-            RawTaggedFieldWriter.write_bytes(buf, field.tag, field.data.as_ref())?;
+            RawTaggedFieldWriter.write_bytes(buf, field.tag, field.data.as_bytes())?;
         }
         Ok(())
     }
@@ -392,11 +393,11 @@ impl Encoder<Option<&str>> for NullableString {
 
 impl Encoder<&str> for NullableString {
     fn encode<B: BufMut>(&self, buf: &mut B, value: &str) -> io::Result<()> {
-        write_slice(buf, Some(value.as_bytes()), self.0)
+        self.encode(buf, Some(value))
     }
 
     fn calculate_size(&self, value: &str) -> usize {
-        slice_size(Some(value.as_bytes()), self.0)
+        self.calculate_size(Some(value))
     }
 }
 
@@ -431,21 +432,21 @@ impl Decoder<Option<Records>> for NullableRecords {
 
 impl Encoder<Option<&Records>> for NullableRecords {
     fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&Records>) -> io::Result<()> {
-        write_slice(buf, value.map(|bs| bs.as_ref()), self.0)
+        write_slice(buf, value.map(|bs| bs.as_bytes()), self.0)
     }
 
     fn calculate_size(&self, value: Option<&Records>) -> usize {
-        slice_size(value.map(|bs| bs.as_ref()), self.0)
+        slice_size(value.map(|bs| bs.as_bytes()), self.0)
     }
 }
 
 impl Encoder<&Records> for NullableRecords {
     fn encode<B: BufMut>(&self, buf: &mut B, value: &Records) -> io::Result<()> {
-        write_slice(buf, Some(value.as_ref()), self.0)
+        self.encode(buf, Some(value))
     }
 
     fn calculate_size(&self, value: &Records) -> usize {
-        slice_size(Some(value.as_ref()), self.0)
+        self.calculate_size(Some(value))
     }
 }
 
@@ -465,41 +466,21 @@ impl Decoder<Option<ByteBuffer>> for NullableBytes {
 
 impl Encoder<Option<&ByteBuffer>> for NullableBytes {
     fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&ByteBuffer>) -> io::Result<()> {
-        write_slice(buf, value.map(|bs| bs.as_ref()), self.0)
+        write_slice(buf, value.map(|bs| bs.as_bytes()), self.0)
     }
 
     fn calculate_size(&self, value: Option<&ByteBuffer>) -> usize {
-        slice_size(value.map(|bs| bs.as_ref()), self.0)
+        slice_size(value.map(|bs| bs.as_bytes()), self.0)
     }
 }
 
 impl Encoder<&ByteBuffer> for NullableBytes {
     fn encode<B: BufMut>(&self, buf: &mut B, value: &ByteBuffer) -> io::Result<()> {
-        write_slice(buf, Some(value.as_ref()), self.0)
+        self.encode(buf, Some(value))
     }
 
     fn calculate_size(&self, value: &ByteBuffer) -> usize {
-        slice_size(Some(value.as_ref()), self.0)
-    }
-}
-
-impl Encoder<Option<&[u8]>> for NullableBytes {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&[u8]>) -> io::Result<()> {
-        write_slice(buf, value, self.0)
-    }
-
-    fn calculate_size(&self, value: Option<&[u8]>) -> usize {
-        slice_size(value, self.0)
-    }
-}
-
-impl Encoder<&[u8]> for NullableBytes {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: &[u8]) -> io::Result<()> {
-        write_slice(buf, Some(value), self.0)
-    }
-
-    fn calculate_size(&self, value: &[u8]) -> usize {
-        slice_size(Some(value), self.0)
+        self.calculate_size(Some(value))
     }
 }
 
