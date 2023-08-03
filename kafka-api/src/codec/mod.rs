@@ -30,7 +30,6 @@ pub trait Decoder<T: Sized> {
 
 pub trait Encoder<T> {
     fn encode<B: BufMut>(&self, buf: &mut B, value: T) -> io::Result<()>;
-
     fn calculate_size(&self, value: T) -> usize;
 }
 

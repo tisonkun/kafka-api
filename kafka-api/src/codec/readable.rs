@@ -166,10 +166,6 @@ impl Readable for &[u8] {
     delegate_forward_buf!();
 }
 
-impl<T: AsRef<[u8]>> Readable for io::Cursor<T> {
-    delegate_forward_buf!();
-}
-
 impl Readable for bytes::Bytes {
     delegate_forward_buf!();
 }
