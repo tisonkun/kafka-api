@@ -176,7 +176,7 @@ impl Serializable for PartitionData {
         if version >= 11 {
             Int32.encode(buf, self.preferred_read_replica)?;
         }
-        NullableBytes(version >= 12).encode(buf, self.records.as_bytes())?;
+        NullableRecords(version >= 12).encode(buf, &self.records)?;
         if version >= 12 {
             let mut n = self.diverging_epoch.is_some() as usize;
             n += self.current_leader.is_some() as usize;
@@ -184,17 +184,17 @@ impl Serializable for PartitionData {
             RawTaggedFieldList.encode_with(buf, n, &self.unknown_tagged_fields, |buf| {
                 if let Some(diverging_epoch) = &self.diverging_epoch {
                     VarInt.encode(buf, 0)?;
-                    VarInt.encode(buf, Struct(version).size(diverging_epoch) as i32)?;
+                    VarInt.encode(buf, Struct(version).calculate_size(diverging_epoch) as i32)?;
                     Struct(version).encode(buf, diverging_epoch)?;
                 }
                 if let Some(current_leader) = &self.current_leader {
                     VarInt.encode(buf, 1)?;
-                    VarInt.encode(buf, Struct(version).size(current_leader) as i32)?;
+                    VarInt.encode(buf, Struct(version).calculate_size(current_leader) as i32)?;
                     Struct(version).encode(buf, current_leader)?;
                 }
                 if let Some(snapshot_id) = &self.snapshot_id {
                     VarInt.encode(buf, 2)?;
-                    VarInt.encode(buf, Struct(version).size(snapshot_id) as i32)?;
+                    VarInt.encode(buf, Struct(version).calculate_size(snapshot_id) as i32)?;
                     Struct(version).encode(buf, snapshot_id)?;
                 }
                 Ok(())

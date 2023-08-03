@@ -99,7 +99,10 @@ impl Serializable for CreatableTopicResult {
         if version >= 5 {
             RawTaggedFieldList.encode_with(buf, 1, &self.unknown_tagged_fields, |buf| {
                 VarInt.encode(buf, 0)?;
-                VarInt.encode(buf, Int16.size(self.topic_config_error_code) as i32)?;
+                VarInt.encode(
+                    buf,
+                    Int16.calculate_size(self.topic_config_error_code) as i32,
+                )?;
                 Int16.encode(buf, self.topic_config_error_code)?;
                 Ok(())
             })?;

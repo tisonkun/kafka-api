@@ -58,54 +58,52 @@ pub const LOG_OVERHEAD: usize = LENGTH_OFFSET + LENGTH_LENGTH;
 
 #[derive(Debug, Default, Clone)]
 pub struct Records {
-    bs: bytes::BytesMut,
+    buf: bytes::BytesMut,
+}
+
+impl AsRef<[u8]> for Records {
+    fn as_ref(&self) -> &[u8] {
+        self.buf.as_ref()
+    }
 }
 
 impl Records {
-    pub fn new(bs: bytes::BytesMut) -> Self {
-        Records { bs }
+    pub fn new(buf: bytes::BytesMut) -> Self {
+        Records { buf }
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bs[..]
-    }
-
-    pub fn into_batches(self) -> io::Result<Vec<RecordBatch>> {
-        decode_batches(self.bs)
-    }
-}
-
-fn decode_batches(mut buf: bytes::BytesMut) -> io::Result<Vec<RecordBatch>> {
-    let mut records = vec![];
-    while buf.remaining() > 0 {
-        if buf.remaining() < HEADER_SIZE_UP_TO_MAGIC {
-            Err(err_codec_message(format!(
-                "no enough bytes when decode records (remaining: {})",
-                buf.remaining()
-            )))?
-        }
-
-        let record_size = (&buf[LENGTH_OFFSET..]).get_i32();
-        let batch_size = record_size as usize + LOG_OVERHEAD;
-        if buf.remaining() < batch_size {
-            Err(err_codec_message(format!(
-                "no enough bytes when decode records (remaining: {})",
-                buf.remaining()
-            )))?
-        }
-
-        let record = match (&buf[MAGIC_OFFSET..]).get_i8() {
-            2 => {
-                let mut meta = buf.split_to(batch_size);
-                let records = meta.split_off(RECORDS_COUNT_OFFSET).freeze();
-                RecordBatch { meta, records }
+    pub fn into_batches(mut self) -> io::Result<Vec<RecordBatch>> {
+        let mut records = vec![];
+        while self.buf.remaining() > 0 {
+            if self.buf.remaining() < HEADER_SIZE_UP_TO_MAGIC {
+                Err(err_codec_message(format!(
+                    "no enough bytes when decode records (remaining: {})",
+                    self.buf.remaining()
+                )))?
             }
-            v => unimplemented!("record batch version {}", v),
-        };
 
-        records.push(record);
+            let record_size = (&self.buf[LENGTH_OFFSET..]).get_i32();
+            let batch_size = record_size as usize + LOG_OVERHEAD;
+            if self.buf.remaining() < batch_size {
+                Err(err_codec_message(format!(
+                    "no enough bytes when decode records (remaining: {})",
+                    self.buf.remaining()
+                )))?
+            }
+
+            let record = match (&self.buf[MAGIC_OFFSET..]).get_i8() {
+                2 => {
+                    let mut meta = self.buf.split_to(batch_size);
+                    let records = meta.split_off(RECORDS_COUNT_OFFSET).freeze();
+                    RecordBatch { meta, records }
+                }
+                v => unimplemented!("record batch version {}", v),
+            };
+
+            records.push(record);
+        }
+        Ok(records)
     }
-    Ok(records)
 }
 
 // meta - all overhead until RECORD_COUNT (exclusive)

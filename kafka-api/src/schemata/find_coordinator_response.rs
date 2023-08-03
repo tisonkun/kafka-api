@@ -109,4 +109,16 @@ impl Serializable for Coordinator {
         RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         Ok(())
     }
+
+    fn calculate_size(&self, _version: i16) -> usize {
+        let mut res = 0;
+        res += NullableString(true).calculate_size(self.key.as_str());
+        res += Int32.fixed_size(/* self.node_id */);
+        res += NullableString(true).calculate_size(self.host.as_str());
+        res += Int32.fixed_size(/* self.port */);
+        res += Int16.fixed_size(/* self.error_code */);
+        res += NullableString(true).calculate_size(self.error_message.as_deref());
+        res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        res
+    }
 }

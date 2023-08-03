@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![feature(io_error_other)]
-#![feature(min_specialization)]
-
 use std::{fmt::Display, io};
 
 pub use codec::{Deserializable, RawTaggedField, Readable, Serializable};
@@ -26,6 +23,7 @@ pub mod error;
 pub mod record;
 mod schemata;
 
+#[allow(unused)]
 fn err_io_other<E>(error: E) -> io::Error
 where
     E: Into<Box<dyn std::error::Error + Send + Sync>>,

@@ -117,7 +117,7 @@ impl Deserializable for PartitionProduceData {
         }
         let mut this = PartitionProduceData {
             index: Int32.decode(buf)?,
-            records: buf.read_records(version >= 9)?,
+            records: NullableRecords(version >= 9).decode(buf)?,
             ..Default::default()
         };
         if version >= 9 {

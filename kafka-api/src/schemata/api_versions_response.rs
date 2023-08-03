@@ -65,18 +65,23 @@ impl Serializable for ApiVersionsResponse {
                 VarInt.encode(
                     buf,
                     NullableArray(Struct(version), version >= 3)
-                        .size(self.supported_features.as_slice()) as i32,
+                        .calculate_size(self.supported_features.as_slice())
+                        as i32,
                 )?;
                 NullableArray(Struct(version), version >= 3)
                     .encode(buf, self.supported_features.as_slice())?;
                 VarInt.encode(buf, 1)?;
-                VarInt.encode(buf, Int64.size(self.finalized_features_epoch) as i32)?;
+                VarInt.encode(
+                    buf,
+                    Int64.fixed_size(/* self.finalized_features_epoch */) as i32,
+                )?;
                 Int64.encode(buf, self.finalized_features_epoch)?;
                 VarInt.encode(buf, 2)?;
                 VarInt.encode(
                     buf,
                     NullableArray(Struct(version), version >= 3)
-                        .size(self.finalized_features.as_slice()) as i32,
+                        .calculate_size(self.finalized_features.as_slice())
+                        as i32,
                 )?;
                 NullableArray(Struct(version), version >= 3)
                     .encode(buf, self.finalized_features.as_slice())?;

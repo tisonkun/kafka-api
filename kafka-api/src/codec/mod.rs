@@ -18,8 +18,8 @@ use bytes::BufMut;
 
 pub use crate::codec::readable::Readable;
 use crate::{
-    err_codec_message, err_io_other,
-    record::{Header, Record},
+    err_codec_message,
+    record::{Header, Record, Records},
 };
 
 pub mod readable;
@@ -31,7 +31,11 @@ pub trait Decoder<T: Sized> {
 pub trait Encoder<T> {
     fn encode<B: BufMut>(&self, buf: &mut B, value: T) -> io::Result<()>;
 
-    fn size(&self, value: T) -> usize;
+    fn calculate_size(&self, value: T) -> usize;
+}
+
+pub trait FixedSizeEncoder {
+    fn fixed_size(&self) -> usize;
 }
 
 pub trait Deserializable: Sized {
@@ -41,7 +45,8 @@ pub trait Deserializable: Sized {
 pub trait Serializable: Sized {
     fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()>;
 
-    fn size(&self, _version: i16) -> usize {
+    fn calculate_size(&self, version: i16) -> usize {
+        let _ = version;
         todo!("calculate size for responses")
     }
 }
@@ -70,8 +75,14 @@ impl RawTaggedFieldList {
             let size = VarInt.decode(buf)? as usize;
             let consumed = f(buf, tag, size)?;
             if !consumed {
-                let data = read_exact_bytes_of(buf, size, "tagged fields")?;
-                res.push(RawTaggedField { tag, data });
+                if buf.remaining() >= size {
+                    res.push(buf.read_unknown_tagged_field(tag, size));
+                } else {
+                    return Err(err_codec_message(format!(
+                        "no enough {n} bytes when decode tagged field (remaining: {})",
+                        buf.remaining()
+                    )));
+                }
             }
         }
         Ok(res)
@@ -96,6 +107,22 @@ impl RawTaggedFieldList {
         }
         Ok(())
     }
+
+    pub(super) fn calculate_size_with(
+        &self,
+        n: usize,  // extra fields
+        bs: usize, // extra bytes
+        fields: &[RawTaggedField],
+    ) -> usize {
+        let mut res = 0;
+        res += VarInt.calculate_size((fields.len() + n) as i32);
+        for field in fields {
+            res += VarInt.calculate_size(field.tag);
+            res += VarInt.calculate_size(field.data.len() as i32);
+            res += field.data.len();
+        }
+        res + bs
+    }
 }
 
 impl Decoder<Vec<RawTaggedField>> for RawTaggedFieldList {
@@ -109,27 +136,20 @@ impl Encoder<&[RawTaggedField]> for RawTaggedFieldList {
         self.encode_with(buf, 0, fields, |_| Ok(()))
     }
 
-    fn size(&self, fields: &[RawTaggedField]) -> usize {
-        let mut res = 0;
-        res += VarInt.size(fields.len() as i32);
-        for field in fields {
-            res += VarInt.size(field.tag);
-            res += VarInt.size(field.data.len() as i32);
-            res += field.data.len();
-        }
-        res
+    fn calculate_size(&self, fields: &[RawTaggedField]) -> usize {
+        self.calculate_size_with(0, 0, fields)
     }
 }
 
 macro_rules! define_ints_codec {
-    ($name:ident, $ty:ty, $put:ident, $get:ident) => {
+    ($name:ident, $ty:ty, $put:ident, $read:ident) => {
         #[derive(Debug, Copy, Clone)]
         pub(super) struct $name;
 
         impl Decoder<$ty> for $name {
             fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<$ty> {
                 if buf.remaining() >= size_of::<$ty>() {
-                    Ok(buf.$get())
+                    Ok(buf.$read())
                 } else {
                     Err(err_codec_message(format!(
                         stringify!(no enough bytes when decode $ty (remaining: {})),
@@ -145,7 +165,7 @@ macro_rules! define_ints_codec {
             }
 
             #[inline]
-            fn size(&self, _: $ty) -> usize {
+            fn calculate_size(&self, _: $ty) -> usize {
                 size_of::<$ty>()
             }
         }
@@ -164,23 +184,30 @@ macro_rules! define_ints_codec {
             }
 
             #[inline]
-            fn size(&self, _: &$ty) -> usize {
+            fn calculate_size(&self, _: &$ty) -> usize {
+                size_of::<$ty>()
+            }
+        }
+
+        impl FixedSizeEncoder for $name {
+            #[inline]
+            fn fixed_size(&self) -> usize {
                 size_of::<$ty>()
             }
         }
     };
 }
 
-define_ints_codec!(Int8, i8, put_i8, get_i8);
-define_ints_codec!(Int16, i16, put_i16, get_i16);
-define_ints_codec!(Int32, i32, put_i32, get_i32);
-define_ints_codec!(Int64, i64, put_i64, get_i64);
-define_ints_codec!(UInt8, u8, put_u8, get_u8);
-define_ints_codec!(UInt16, u16, put_u16, get_u16);
-define_ints_codec!(UInt32, u32, put_u32, get_u32);
-define_ints_codec!(UInt64, u64, put_u64, get_u64);
-define_ints_codec!(Float32, f32, put_f32, get_f32);
-define_ints_codec!(Float64, f64, put_f64, get_f64);
+define_ints_codec!(Int8, i8, put_i8, read_i8);
+define_ints_codec!(Int16, i16, put_i16, read_i16);
+define_ints_codec!(Int32, i32, put_i32, read_i32);
+define_ints_codec!(Int64, i64, put_i64, read_i64);
+define_ints_codec!(UInt8, u8, put_u8, read_u8);
+define_ints_codec!(UInt16, u16, put_u16, read_u16);
+define_ints_codec!(UInt32, u32, put_u32, read_u32);
+define_ints_codec!(UInt64, u64, put_u64, read_u64);
+define_ints_codec!(Float32, f32, put_f32, read_f32);
+define_ints_codec!(Float64, f64, put_f64, read_f64);
 
 #[derive(Debug, Copy, Clone)]
 pub(super) struct Bool;
@@ -188,7 +215,7 @@ pub(super) struct Bool;
 impl Decoder<bool> for Bool {
     fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<bool> {
         if buf.remaining() >= size_of::<u8>() {
-            Ok(buf.get_u8() != 0)
+            Ok(buf.read_u8() != 0)
         } else {
             Err(err_codec_message(format!(
                 "no enough bytes when decode boolean (remaining: {})",
@@ -211,7 +238,13 @@ impl Encoder<bool> for Bool {
         }
     }
 
-    fn size(&self, _: bool) -> usize {
+    fn calculate_size(&self, _: bool) -> usize {
+        size_of::<bool>()
+    }
+}
+
+impl FixedSizeEncoder for Bool {
+    fn fixed_size(&self) -> usize {
         size_of::<bool>()
     }
 }
@@ -221,23 +254,7 @@ pub(super) struct VarInt;
 
 impl Decoder<i32> for VarInt {
     fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<i32> {
-        let mut res = 0;
-        for i in 0.. {
-            debug_assert!(i < 5); // no larger than i32
-            if buf.remaining() >= size_of::<u8>() {
-                let next = buf.get_u8() as i32;
-                res |= (next & 0x7F) << (i * 7);
-                if next < 0x80 {
-                    break;
-                }
-            } else {
-                return Err(err_codec_message(format!(
-                    "no enough bytes when decode varint (res: {res}, remaining: {})",
-                    buf.remaining()
-                )));
-            }
-        }
-        Ok(res)
+        buf.read_unsigned_varint()
     }
 }
 
@@ -252,7 +269,7 @@ impl Encoder<i32> for VarInt {
         Ok(())
     }
 
-    fn size(&self, value: i32) -> usize {
+    fn calculate_size(&self, value: i32) -> usize {
         let mut res = 1;
         let mut v = value;
         while v >= 0x80 {
@@ -269,23 +286,7 @@ pub(super) struct VarLong;
 
 impl Decoder<i64> for VarLong {
     fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<i64> {
-        let mut res = 0;
-        for i in 0.. {
-            debug_assert!(i < 10); // no larger than i64
-            if buf.remaining() >= size_of::<u8>() {
-                let next = buf.get_u8() as i64;
-                res |= (next & 0x7F) << (i * 7);
-                if next < 0x80 {
-                    break;
-                }
-            } else {
-                return Err(err_codec_message(format!(
-                    "no enough bytes when decode varlong (res: {res}, remaining: {})",
-                    buf.remaining()
-                )));
-            }
-        }
-        Ok(res)
+        buf.read_unsigned_varlong()
     }
 }
 
@@ -300,7 +301,7 @@ impl Encoder<i64> for VarLong {
         Ok(())
     }
 
-    fn size(&self, value: i64) -> usize {
+    fn calculate_size(&self, value: i64) -> usize {
         let mut res = 1;
         let mut v = value;
         while v >= 0x80 {
@@ -323,12 +324,22 @@ impl Decoder<Option<String>> for NullableString {
             Int16.decode(buf)? as i32
         };
 
-        match read_nullable_bytes(buf, len, "string")? {
-            None => Ok(None),
-            Some(bs) => {
-                let str = String::from_utf8(bs.to_vec()).map_err(err_io_other)?;
-                Ok(Some(str))
+        match len {
+            -1 => Ok(None),
+            n if n >= 0 => {
+                let n = n as usize;
+                if buf.remaining() >= n {
+                    Ok(Some(buf.read_string(n)))
+                } else {
+                    Err(err_codec_message(format!(
+                        "no enough {n} bytes when decode string (remaining: {})",
+                        buf.remaining()
+                    )))
+                }
             }
+            n => Err(err_codec_message(format!(
+                "illegal length {n} when decode string"
+            ))),
         }
     }
 }
@@ -338,7 +349,7 @@ impl Encoder<Option<&str>> for NullableString {
         write_slice(buf, value.map(|s| s.as_bytes()), self.0)
     }
 
-    fn size(&self, value: Option<&str>) -> usize {
+    fn calculate_size(&self, value: Option<&str>) -> usize {
         slice_size(value.map(|s| s.as_bytes()), self.0)
     }
 }
@@ -348,8 +359,57 @@ impl Encoder<&str> for NullableString {
         write_slice(buf, Some(value.as_bytes()), self.0)
     }
 
-    fn size(&self, value: &str) -> usize {
+    fn calculate_size(&self, value: &str) -> usize {
         slice_size(Some(value.as_bytes()), self.0)
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub(super) struct NullableRecords(pub bool /* flexible */);
+
+impl Decoder<Option<Records>> for NullableRecords {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Option<Records>> {
+        match if self.0 {
+            VarInt.decode(buf)? - 1
+        } else {
+            Int16.decode(buf)? as i32
+        } {
+            -1 => Ok(None),
+            n if n >= 0 => {
+                let n = n as usize;
+                if buf.remaining() >= n {
+                    Ok(Some(buf.read_records(n)))
+                } else {
+                    Err(err_codec_message(format!(
+                        "no enough {n} bytes when decode records (remaining: {})",
+                        buf.remaining()
+                    )))
+                }
+            }
+            n => Err(err_codec_message(format!(
+                "illegal length {n} when decode records"
+            ))),
+        }
+    }
+}
+
+impl Encoder<Option<&Records>> for NullableRecords {
+    fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&Records>) -> io::Result<()> {
+        write_slice(buf, value.map(|bs| bs.as_ref()), self.0)
+    }
+
+    fn calculate_size(&self, value: Option<&Records>) -> usize {
+        slice_size(value.map(|bs| bs.as_ref()), self.0)
+    }
+}
+
+impl Encoder<&Records> for NullableRecords {
+    fn encode<B: BufMut>(&self, buf: &mut B, value: &Records) -> io::Result<()> {
+        write_slice(buf, Some(value.as_ref()), self.0)
+    }
+
+    fn calculate_size(&self, value: &Records) -> usize {
+        slice_size(Some(value.as_ref()), self.0)
     }
 }
 
@@ -372,7 +432,7 @@ impl Encoder<Option<&bytes::Bytes>> for NullableBytes {
         write_slice(buf, value.map(|bs| bs.as_ref()), self.0)
     }
 
-    fn size(&self, value: Option<&bytes::Bytes>) -> usize {
+    fn calculate_size(&self, value: Option<&bytes::Bytes>) -> usize {
         slice_size(value.map(|bs| bs.as_ref()), self.0)
     }
 }
@@ -382,7 +442,7 @@ impl Encoder<&bytes::Bytes> for NullableBytes {
         write_slice(buf, Some(value.as_ref()), self.0)
     }
 
-    fn size(&self, value: &bytes::Bytes) -> usize {
+    fn calculate_size(&self, value: &bytes::Bytes) -> usize {
         slice_size(Some(value.as_ref()), self.0)
     }
 }
@@ -392,7 +452,7 @@ impl Encoder<Option<&[u8]>> for NullableBytes {
         write_slice(buf, value, self.0)
     }
 
-    fn size(&self, value: Option<&[u8]>) -> usize {
+    fn calculate_size(&self, value: Option<&[u8]>) -> usize {
         slice_size(value, self.0)
     }
 }
@@ -402,7 +462,7 @@ impl Encoder<&[u8]> for NullableBytes {
         write_slice(buf, Some(value), self.0)
     }
 
-    fn size(&self, value: &[u8]) -> usize {
+    fn calculate_size(&self, value: &[u8]) -> usize {
         slice_size(Some(value), self.0)
     }
 }
@@ -413,9 +473,9 @@ fn slice_size(slice: Option<&[u8]>, flexible: bool) -> usize {
         Some(bs) => {
             let len = bs.len();
             len + if flexible {
-                VarInt.size(len as i32 + 1)
+                VarInt.calculate_size(len as i32 + 1)
             } else {
-                Int16.size(len as i16)
+                Int16.calculate_size(len as i16)
             }
         }
     }
@@ -463,7 +523,7 @@ fn read_nullable_bytes<B: Readable>(
 
 fn read_exact_bytes_of<B: Readable>(buf: &mut B, n: usize, ty: &str) -> io::Result<bytes::Bytes> {
     if buf.remaining() >= n {
-        Ok(buf.copy_to_bytes(n))
+        Ok(buf.read_bytes(n))
     } else {
         Err(err_codec_message(format!(
             "no enough {n} bytes when decode {ty:?} (remaining: {})",
@@ -513,18 +573,18 @@ impl<T, E: for<'a> Encoder<&'a T>> Encoder<Option<&[T]>> for NullableArray<E> {
         }
     }
 
-    fn size(&self, value: Option<&[T]>) -> usize {
+    fn calculate_size(&self, value: Option<&[T]>) -> usize {
         match value {
             None => 1,
             Some(ns) => {
                 let mut res = 0;
                 res += if self.1 {
-                    VarInt.size(ns.len() as i32 + 1)
+                    VarInt.calculate_size(ns.len() as i32 + 1)
                 } else {
-                    Int32.size(ns.len() as i32)
+                    Int32.calculate_size(ns.len() as i32)
                 };
                 for n in ns {
-                    res += self.0.size(n);
+                    res += self.0.calculate_size(n);
                 }
                 res
             }
@@ -545,8 +605,8 @@ impl<T, E: for<'a> Encoder<&'a T>> Encoder<&[T]> for NullableArray<E> {
         Ok(())
     }
 
-    fn size(&self, value: &[T]) -> usize {
-        self.size(Some(value))
+    fn calculate_size(&self, value: &[T]) -> usize {
+        self.calculate_size(Some(value))
     }
 }
 
@@ -564,8 +624,8 @@ impl<T: Serializable> Encoder<&T> for Struct {
         value.write(buf, self.0)
     }
 
-    fn size(&self, value: &T) -> usize {
-        value.size(self.0)
+    fn calculate_size(&self, value: &T) -> usize {
+        value.calculate_size(self.0)
     }
 }
 
@@ -574,9 +634,14 @@ pub(super) struct Uuid;
 
 impl Decoder<uuid::Uuid> for Uuid {
     fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<uuid::Uuid> {
-        let bs = read_exact_bytes_of(buf, 16, "uuid")?;
-        let uuid = uuid::Uuid::from_slice(bs.as_ref()).map_err(err_io_other)?;
-        Ok(uuid)
+        if buf.remaining() >= 16 {
+            Ok(buf.read_uuid())
+        } else {
+            Err(err_codec_message(format!(
+                "no enough bytes when decode uuid (remaining: {})",
+                buf.remaining()
+            )))
+        }
     }
 }
 
@@ -593,17 +658,15 @@ impl Encoder<uuid::Uuid> for Uuid {
         }
     }
 
-    fn size(&self, _: uuid::Uuid) -> usize {
+    fn calculate_size(&self, _: uuid::Uuid) -> usize {
         16
     }
 }
 
-fn varint_zigzag(i: i32) -> i32 {
-    (((i as u32) >> 1) as i32) ^ -(i & 1)
-}
-
-fn varlong_zigzag(i: i64) -> i64 {
-    (((i as u64) >> 1) as i64) ^ -(i & 1)
+impl FixedSizeEncoder for Uuid {
+    fn fixed_size(&self) -> usize {
+        16
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -615,30 +678,36 @@ impl Decoder<Vec<Record>> for RecordList {
         let mut records = vec![];
         for _ in 0..cnt {
             let mut record = Record {
-                len: varint_zigzag(VarInt.decode(buf)?),
+                len: buf.read_varint()?,
                 attributes: Int8.decode(buf)?,
-                timestamp_delta: varlong_zigzag(VarLong.decode(buf)?),
-                offset_delta: varint_zigzag(VarInt.decode(buf)?),
+                timestamp_delta: buf.read_varlong()?,
+                offset_delta: buf.read_varint()?,
                 ..Default::default()
             };
             {
-                let len = varint_zigzag(VarInt.decode(buf)?);
+                let len = buf.read_varint()?;
                 record.key_len = len;
                 record.key = read_nullable_bytes(buf, len, "bytes")?;
             }
             {
-                let len = varint_zigzag(VarInt.decode(buf)?);
+                let len = buf.read_varint()?;
                 record.value_len = len;
                 record.value = read_nullable_bytes(buf, len, "bytes")?;
             }
-            let headers_cnt = varint_zigzag(VarInt.decode(buf)?);
+            let headers_cnt = buf.read_varint()?;
             for _ in 0..headers_cnt {
-                record.headers.push(Header {
-                    key_len: varint_zigzag(VarInt.decode(buf)?),
-                    key: read_nullable_bytes(buf, record.key_len, "bytes")?,
-                    value_len: varint_zigzag(VarInt.decode(buf)?),
-                    value: read_nullable_bytes(buf, record.value_len, "bytes")?,
-                });
+                let mut header = Header::default();
+                {
+                    let len = buf.read_varint()?;
+                    header.key_len = len;
+                    header.key = read_nullable_bytes(buf, len, "bytes")?;
+                }
+                {
+                    let len = buf.read_varint()?;
+                    header.value_len = len;
+                    header.value = read_nullable_bytes(buf, len, "bytes")?;
+                }
+                record.headers.push(header);
             }
             records.push(record);
         }
