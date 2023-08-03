@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::BufMut;
-
 use crate::{bytebuffer::ByteBuffer, codec::*, err_encode_message_null};
 
 // Version 1 is the same as version 0.
@@ -62,7 +60,7 @@ pub struct JoinGroupResponse {
 }
 
 impl Serializable for JoinGroupResponse {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 2 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -86,6 +84,29 @@ impl Serializable for JoinGroupResponse {
         }
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        if version >= 2 {
+            res += Int32.calculate_size(self.throttle_time_ms);
+        }
+        res += Int16.calculate_size(self.error_code);
+        res += Int32.calculate_size(self.generation_id);
+        if version >= 7 {
+            res += NullableString(true).calculate_size(self.protocol_type.as_deref());
+        }
+        res += NullableString(version >= 6).calculate_size(self.protocol_name.as_deref());
+        res += NullableString(version >= 6).calculate_size(self.leader.as_str());
+        if version >= 9 {
+            res += Bool.calculate_size(self.skip_assignment);
+        }
+        res += NullableString(version >= 6).calculate_size(self.member_id.as_str());
+        res += NullableArray(Struct(version), version >= 6).calculate_size(self.members.as_slice());
+        if version >= 6 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -101,7 +122,7 @@ pub struct JoinGroupResponseMember {
 }
 
 impl Serializable for JoinGroupResponseMember {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         NullableString(version >= 6).encode(buf, self.member_id.as_str())?;
         if version >= 5 {
             NullableString(version >= 6).encode(buf, self.group_instance_id.as_deref())?;
@@ -111,5 +132,18 @@ impl Serializable for JoinGroupResponseMember {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += NullableString(version >= 6).calculate_size(self.member_id.as_str());
+        if version >= 5 {
+            res += NullableString(version >= 6).calculate_size(self.group_instance_id.as_deref());
+        }
+        res += NullableBytes(version >= 6).calculate_size(&self.metadata);
+        if version >= 6 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }

@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::BufMut;
-
 use crate::{bytebuffer::ByteBuffer, codec::*};
 
 // Version 1 adds throttle time.
@@ -48,7 +46,7 @@ pub struct SyncGroupResponse {
 }
 
 impl Serializable for SyncGroupResponse {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 1 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -62,5 +60,22 @@ impl Serializable for SyncGroupResponse {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        if version >= 1 {
+            res += Int32.calculate_size(self.throttle_time_ms);
+        }
+        res += Int16.calculate_size(self.error_code);
+        if version >= 5 {
+            res += NullableString(true).calculate_size(self.protocol_type.as_deref());
+            res += NullableString(true).calculate_size(self.protocol_name.as_deref());
+        }
+        res += NullableBytes(version >= 4).calculate_size(&self.assignment);
+        if version >= 4 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }

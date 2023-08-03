@@ -14,23 +14,22 @@
 
 use std::{io, mem::size_of};
 
-use bytes::BufMut;
-
-pub use crate::codec::readable::Readable;
+pub use crate::codec::{readable::Readable, writable::Writable};
 use crate::{
     bytebuffer::ByteBuffer,
     err_codec_message,
-    record::{Header, Record, Records},
+    record::{Header, MutableRecords, ReadOnlyRecords, Record},
 };
 
 pub mod readable;
+pub mod writable;
 
 pub trait Decoder<T: Sized> {
     fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<T>;
 }
 
 pub trait Encoder<T> {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: T) -> io::Result<()>;
+    fn encode<B: Writable>(&self, buf: &mut B, value: T) -> io::Result<()>;
     fn calculate_size(&self, value: T) -> usize;
 }
 
@@ -43,12 +42,9 @@ pub trait Deserializable: Sized {
 }
 
 pub trait Serializable: Sized {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()>;
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()>;
 
-    fn calculate_size(&self, version: i16) -> usize {
-        let _ = version;
-        todo!("calculate size for responses")
-    }
+    fn calculate_size(&self, version: i16) -> usize;
 }
 
 #[derive(Debug, Default, Clone)]
@@ -62,7 +58,7 @@ pub(super) struct RawTaggedFieldWriter;
 
 impl RawTaggedFieldWriter {
     pub(super) fn write_field<
-        B: BufMut,
+        B: Writable,
         T: Copy, // primitive or reference
         E: Encoder<T>,
     >(
@@ -91,10 +87,15 @@ impl RawTaggedFieldWriter {
         res + size
     }
 
-    fn write_bytes<B: BufMut>(&self, buf: &mut B, tag: i32, bs: &[u8]) -> io::Result<()> {
+    fn write_byte_buffer<B: Writable>(
+        &self,
+        buf: &mut B,
+        tag: i32,
+        bs: &ByteBuffer,
+    ) -> io::Result<()> {
         VarInt.encode(buf, tag)?;
         VarInt.encode(buf, bs.len() as i32)?;
-        buf.put_slice(bs);
+        buf.write_bytes(bs)?;
         Ok(())
     }
 }
@@ -131,7 +132,7 @@ impl RawTaggedFieldList {
         Ok(res)
     }
 
-    pub(super) fn encode_with<B: BufMut, F>(
+    pub(super) fn encode_with<B: Writable, F>(
         &self,
         buf: &mut B,
         n: usize, // extra fields
@@ -144,7 +145,7 @@ impl RawTaggedFieldList {
         VarInt.encode(buf, (fields.len() + n) as i32)?;
         f(buf)?;
         for field in fields {
-            RawTaggedFieldWriter.write_bytes(buf, field.tag, field.data.as_ref())?;
+            RawTaggedFieldWriter.write_byte_buffer(buf, field.tag, &field.data)?;
         }
         Ok(())
     }
@@ -173,7 +174,7 @@ impl Decoder<Vec<RawTaggedField>> for RawTaggedFieldList {
 }
 
 impl Encoder<&[RawTaggedField]> for RawTaggedFieldList {
-    fn encode<B: BufMut>(&self, buf: &mut B, fields: &[RawTaggedField]) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, fields: &[RawTaggedField]) -> io::Result<()> {
         self.encode_with(buf, 0, fields, |_| Ok(()))
     }
 
@@ -201,7 +202,7 @@ macro_rules! define_ints_codec {
         }
 
         impl Encoder<$ty> for $name {
-            fn encode<B: BufMut>(&self, buf: &mut B, value: $ty) -> io::Result<()> {
+            fn encode<B: Writable>(&self, buf: &mut B, value: $ty) -> io::Result<()> {
                 self.encode(buf, &value)
             }
 
@@ -212,16 +213,8 @@ macro_rules! define_ints_codec {
         }
 
         impl Encoder<&$ty> for $name {
-            fn encode<B: BufMut>(&self, buf: &mut B, value: &$ty) -> io::Result<()> {
-                if buf.remaining_mut() >= size_of::<$ty>() {
-                    buf.$put(*value);
-                    Ok(())
-                } else {
-                    Err(err_codec_message(format!(
-                        stringify!(no enough bytes when encode $ty (remaining: {})),
-                        buf.remaining_mut()
-                    )))
-                }
+            fn encode<B: Writable>(&self, buf: &mut B, value: &$ty) -> io::Result<()> {
+                buf.$put(*value)
             }
 
             #[inline]
@@ -236,16 +229,16 @@ macro_rules! define_ints_codec {
     };
 }
 
-define_ints_codec!(Int8, i8, put_i8, read_i8);
-define_ints_codec!(Int16, i16, put_i16, read_i16);
-define_ints_codec!(Int32, i32, put_i32, read_i32);
-define_ints_codec!(Int64, i64, put_i64, read_i64);
-define_ints_codec!(UInt8, u8, put_u8, read_u8);
-define_ints_codec!(UInt16, u16, put_u16, read_u16);
-define_ints_codec!(UInt32, u32, put_u32, read_u32);
-define_ints_codec!(UInt64, u64, put_u64, read_u64);
-define_ints_codec!(Float32, f32, put_f32, read_f32);
-define_ints_codec!(Float64, f64, put_f64, read_f64);
+define_ints_codec!(Int8, i8, write_i8, read_i8);
+define_ints_codec!(Int16, i16, write_i16, read_i16);
+define_ints_codec!(Int32, i32, write_i32, read_i32);
+define_ints_codec!(Int64, i64, write_i64, read_i64);
+define_ints_codec!(UInt8, u8, write_u8, read_u8);
+define_ints_codec!(UInt16, u16, write_u16, read_u16);
+define_ints_codec!(UInt32, u32, write_u32, read_u32);
+define_ints_codec!(UInt64, u64, write_u64, read_u64);
+define_ints_codec!(Float32, f32, write_f32, read_f32);
+define_ints_codec!(Float64, f64, write_f64, read_f64);
 
 #[derive(Debug, Copy, Clone)]
 pub(super) struct Bool;
@@ -264,16 +257,9 @@ impl Decoder<bool> for Bool {
 }
 
 impl Encoder<bool> for Bool {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: bool) -> io::Result<()> {
-        if buf.remaining_mut() >= size_of::<u8>() {
-            buf.put_u8(value as u8);
-            Ok(())
-        } else {
-            Err(err_codec_message(format!(
-                "no enough bytes when encode boolean (remaining: {})",
-                buf.remaining_mut()
-            )))
-        }
+    fn encode<B: Writable>(&self, buf: &mut B, value: bool) -> io::Result<()> {
+        buf.write_u8(value as u8)?;
+        Ok(())
     }
 
     fn calculate_size(&self, _: bool) -> usize {
@@ -295,14 +281,8 @@ impl Decoder<i32> for VarInt {
 }
 
 impl Encoder<i32> for VarInt {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: i32) -> io::Result<()> {
-        let mut v = value;
-        while v >= 0x80 {
-            buf.put_u8((v as u8) | 0x80);
-            v >>= 7;
-        }
-        buf.put_u8(v as u8);
-        Ok(())
+    fn encode<B: Writable>(&self, buf: &mut B, value: i32) -> io::Result<()> {
+        buf.write_unsigned_varint(value)
     }
 
     fn calculate_size(&self, value: i32) -> usize {
@@ -312,7 +292,7 @@ impl Encoder<i32> for VarInt {
             res += 1;
             v >>= 7;
         }
-        debug_assert!(v <= 5);
+        debug_assert!(res <= 5);
         res
     }
 }
@@ -327,14 +307,8 @@ impl Decoder<i64> for VarLong {
 }
 
 impl Encoder<i64> for VarLong {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: i64) -> io::Result<()> {
-        let mut v = value;
-        while v >= 0x80 {
-            buf.put_u8((v as u8) | 0x80);
-            v >>= 7;
-        }
-        buf.put_u8(v as u8);
-        Ok(())
+    fn encode<B: Writable>(&self, buf: &mut B, value: i64) -> io::Result<()> {
+        buf.write_unsigned_varlong(value)
     }
 
     fn calculate_size(&self, value: i64) -> usize {
@@ -344,7 +318,7 @@ impl Encoder<i64> for VarLong {
             res += 1;
             v >>= 7;
         }
-        debug_assert!(v <= 10);
+        debug_assert!(res <= 10);
         res
     }
 }
@@ -381,7 +355,7 @@ impl Decoder<Option<String>> for NullableString {
 }
 
 impl Encoder<Option<&str>> for NullableString {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&str>) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: Option<&str>) -> io::Result<()> {
         write_slice(buf, value.map(|s| s.as_bytes()), self.0)
     }
 
@@ -391,20 +365,20 @@ impl Encoder<Option<&str>> for NullableString {
 }
 
 impl Encoder<&str> for NullableString {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: &str) -> io::Result<()> {
-        write_slice(buf, Some(value.as_bytes()), self.0)
+    fn encode<B: Writable>(&self, buf: &mut B, value: &str) -> io::Result<()> {
+        self.encode(buf, Some(value))
     }
 
     fn calculate_size(&self, value: &str) -> usize {
-        slice_size(Some(value.as_bytes()), self.0)
+        self.calculate_size(Some(value))
     }
 }
 
 #[derive(Debug, Copy, Clone)]
 pub(super) struct NullableRecords(pub bool /* flexible */);
 
-impl Decoder<Option<Records>> for NullableRecords {
-    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Option<Records>> {
+impl Decoder<Option<MutableRecords>> for NullableRecords {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Option<MutableRecords>> {
         match if self.0 {
             VarInt.decode(buf)? - 1
         } else {
@@ -429,23 +403,57 @@ impl Decoder<Option<Records>> for NullableRecords {
     }
 }
 
-impl Encoder<Option<&Records>> for NullableRecords {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&Records>) -> io::Result<()> {
-        write_slice(buf, value.map(|bs| bs.as_ref()), self.0)
+impl Encoder<Option<&ReadOnlyRecords>> for NullableRecords {
+    fn encode<B: Writable>(&self, buf: &mut B, value: Option<&ReadOnlyRecords>) -> io::Result<()> {
+        match value {
+            None => {
+                if self.0 {
+                    VarInt.encode(buf, 0)?
+                } else {
+                    Int32.encode(buf, -1)?
+                }
+            }
+            Some(r) => {
+                let len = r.size() as i16;
+                if self.0 {
+                    VarInt.encode(buf, len as i32 + 1)?;
+                } else {
+                    Int16.encode(buf, len)?;
+                }
+                buf.write_records(r)?;
+            }
+        }
+        Ok(())
     }
 
-    fn calculate_size(&self, value: Option<&Records>) -> usize {
-        slice_size(value.map(|bs| bs.as_ref()), self.0)
+    fn calculate_size(&self, value: Option<&ReadOnlyRecords>) -> usize {
+        match value {
+            None => {
+                if self.0 {
+                    1
+                } else {
+                    Int16::SIZE
+                }
+            }
+            Some(r) => {
+                r.size()
+                    + if self.0 {
+                        VarInt.calculate_size(r.size() as i32 + 1)
+                    } else {
+                        Int16::SIZE
+                    }
+            }
+        }
     }
 }
 
-impl Encoder<&Records> for NullableRecords {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: &Records) -> io::Result<()> {
-        write_slice(buf, Some(value.as_ref()), self.0)
+impl Encoder<&ReadOnlyRecords> for NullableRecords {
+    fn encode<B: Writable>(&self, buf: &mut B, value: &ReadOnlyRecords) -> io::Result<()> {
+        self.encode(buf, Some(value))
     }
 
-    fn calculate_size(&self, value: &Records) -> usize {
-        slice_size(Some(value.as_ref()), self.0)
+    fn calculate_size(&self, value: &ReadOnlyRecords) -> usize {
+        self.calculate_size(Some(value))
     }
 }
 
@@ -464,60 +472,46 @@ impl Decoder<Option<ByteBuffer>> for NullableBytes {
 }
 
 impl Encoder<Option<&ByteBuffer>> for NullableBytes {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&ByteBuffer>) -> io::Result<()> {
-        write_slice(buf, value.map(|bs| bs.as_ref()), self.0)
+    fn encode<B: Writable>(&self, buf: &mut B, value: Option<&ByteBuffer>) -> io::Result<()> {
+        write_slice(buf, value.map(|bs| bs.as_bytes()), self.0)
     }
 
     fn calculate_size(&self, value: Option<&ByteBuffer>) -> usize {
-        slice_size(value.map(|bs| bs.as_ref()), self.0)
+        slice_size(value.map(|bs| bs.as_bytes()), self.0)
     }
 }
 
 impl Encoder<&ByteBuffer> for NullableBytes {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: &ByteBuffer) -> io::Result<()> {
-        write_slice(buf, Some(value.as_ref()), self.0)
+    fn encode<B: Writable>(&self, buf: &mut B, value: &ByteBuffer) -> io::Result<()> {
+        self.encode(buf, Some(value))
     }
 
     fn calculate_size(&self, value: &ByteBuffer) -> usize {
-        slice_size(Some(value.as_ref()), self.0)
-    }
-}
-
-impl Encoder<Option<&[u8]>> for NullableBytes {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&[u8]>) -> io::Result<()> {
-        write_slice(buf, value, self.0)
-    }
-
-    fn calculate_size(&self, value: Option<&[u8]>) -> usize {
-        slice_size(value, self.0)
-    }
-}
-
-impl Encoder<&[u8]> for NullableBytes {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: &[u8]) -> io::Result<()> {
-        write_slice(buf, Some(value), self.0)
-    }
-
-    fn calculate_size(&self, value: &[u8]) -> usize {
-        slice_size(Some(value), self.0)
+        self.calculate_size(Some(value))
     }
 }
 
 fn slice_size(slice: Option<&[u8]>, flexible: bool) -> usize {
     match slice {
-        None => 1,
-        Some(bs) => {
-            let len = bs.len();
-            len + if flexible {
-                VarInt.calculate_size(len as i32 + 1)
+        None => {
+            if flexible {
+                1
             } else {
-                Int16.calculate_size(len as i16)
+                Int16::SIZE
             }
+        }
+        Some(bs) => {
+            bs.len()
+                + if flexible {
+                    VarInt.calculate_size(bs.len() as i32 + 1)
+                } else {
+                    Int16::SIZE
+                }
         }
     }
 }
 
-fn write_slice<B: BufMut>(buf: &mut B, slice: Option<&[u8]>, flexible: bool) -> io::Result<()> {
+fn write_slice<B: Writable>(buf: &mut B, slice: Option<&[u8]>, flexible: bool) -> io::Result<()> {
     match slice {
         None => {
             if flexible {
@@ -533,7 +527,7 @@ fn write_slice<B: BufMut>(buf: &mut B, slice: Option<&[u8]>, flexible: bool) -> 
             } else {
                 Int16.encode(buf, len)?;
             }
-            buf.put_slice(bs);
+            buf.write_slice(bs)?;
         }
     }
     Ok(())
@@ -591,7 +585,7 @@ impl<T, E: Decoder<T>> Decoder<Option<Vec<T>>> for NullableArray<E> {
 }
 
 impl<T, E: for<'a> Encoder<&'a T>> Encoder<Option<&[T]>> for NullableArray<E> {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: Option<&[T]>) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: Option<&[T]>) -> io::Result<()> {
         match value {
             None => {
                 if self.1 {
@@ -624,7 +618,7 @@ impl<T, E: for<'a> Encoder<&'a T>> Encoder<Option<&[T]>> for NullableArray<E> {
 }
 
 impl<T, E: for<'a> Encoder<&'a T>> Encoder<&[T]> for NullableArray<E> {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: &[T]) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: &[T]) -> io::Result<()> {
         if self.1 {
             VarInt.encode(buf, value.len() as i32 + 1)?;
         } else {
@@ -651,7 +645,7 @@ impl<T: Deserializable> Decoder<T> for Struct {
 }
 
 impl<T: Serializable> Encoder<&T> for Struct {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: &T) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: &T) -> io::Result<()> {
         value.write(buf, self.0)
     }
 
@@ -677,16 +671,8 @@ impl Decoder<uuid::Uuid> for Uuid {
 }
 
 impl Encoder<uuid::Uuid> for Uuid {
-    fn encode<B: BufMut>(&self, buf: &mut B, value: uuid::Uuid) -> io::Result<()> {
-        if buf.remaining_mut() >= 16 {
-            buf.put_slice(value.as_bytes());
-            Ok(())
-        } else {
-            Err(err_codec_message(format!(
-                "no enough bytes when encode uuid (remaining: {})",
-                buf.remaining_mut()
-            )))
-        }
+    fn encode<B: Writable>(&self, buf: &mut B, value: uuid::Uuid) -> io::Result<()> {
+        buf.write_uuid(value)
     }
 
     fn calculate_size(&self, _: uuid::Uuid) -> usize {

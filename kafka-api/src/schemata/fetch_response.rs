@@ -14,9 +14,7 @@
 
 use std::io;
 
-use bytes::BufMut;
-
-use crate::{codec::*, err_encode_message_unsupported, record::Records};
+use crate::{codec::*, err_encode_message_unsupported, record::ReadOnlyRecords};
 
 // Version 1 adds throttle time.
 //
@@ -63,7 +61,7 @@ pub struct FetchResponse {
 }
 
 impl Serializable for FetchResponse {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 1 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -76,6 +74,23 @@ impl Serializable for FetchResponse {
             RawTaggedFieldList.encode(buf, self.unknown_tagged_fields.as_slice())?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        if version >= 1 {
+            res += Int32.calculate_size(self.throttle_time_ms);
+        }
+        if version >= 7 {
+            res += Int16.calculate_size(self.error_code);
+            res += Int32.calculate_size(self.session_id);
+        }
+        res +=
+            NullableArray(Struct(version), version >= 12).calculate_size(self.responses.as_slice());
+        if version >= 12 {
+            res += RawTaggedFieldList.calculate_size(self.unknown_tagged_fields.as_slice());
+        }
+        res
     }
 }
 
@@ -92,18 +107,34 @@ pub struct FetchableTopicResponse {
 }
 
 impl Serializable for FetchableTopicResponse {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version <= 12 {
             NullableString(version >= 12).encode(buf, self.topic.as_str())?;
         }
         if version >= 13 {
-            Uuid.encode(buf, self.topic_id)?
+            Uuid.encode(buf, self.topic_id)?;
         }
         NullableArray(Struct(version), version >= 12).encode(buf, self.partitions.as_slice())?;
         if version >= 12 {
             RawTaggedFieldList.encode(buf, self.unknown_tagged_fields.as_slice())?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        if version <= 12 {
+            res += NullableString(version >= 12).calculate_size(self.topic.as_str());
+        }
+        if version >= 13 {
+            res += Uuid.calculate_size(self.topic_id);
+        }
+        res += NullableArray(Struct(version), version >= 12)
+            .calculate_size(self.partitions.as_slice());
+        if version >= 12 {
+            res += RawTaggedFieldList.calculate_size(self.unknown_tagged_fields.as_slice());
+        }
+        res
     }
 }
 
@@ -134,7 +165,7 @@ pub struct PartitionData {
     /// The preferred read replica for the consumer to use on its next fetch request
     pub preferred_read_replica: i32,
     /// The record data.
-    pub records: Records,
+    pub records: ReadOnlyRecords,
     /// Unknown tagged fields.
     pub unknown_tagged_fields: Vec<RawTaggedField>,
 }
@@ -159,7 +190,7 @@ impl Default for PartitionData {
 }
 
 impl Serializable for PartitionData {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int32.encode(buf, self.partition_index)?;
         Int16.encode(buf, self.error_code)?;
         Int64.encode(buf, self.high_watermark)?;
@@ -167,7 +198,7 @@ impl Serializable for PartitionData {
             Int64.encode(buf, self.last_stable_offset)?;
         }
         if version >= 5 {
-            Int64.encode(buf, self.log_start_offset)?
+            Int64.encode(buf, self.log_start_offset)?;
         }
         if version >= 4 {
             NullableArray(Struct(version), version >= 12)
@@ -196,6 +227,46 @@ impl Serializable for PartitionData {
         }
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int32::SIZE; // self.partition_index
+        res += Int16::SIZE; // self.error_code
+        res += Int64::SIZE; // self.high_watermark
+        if version >= 4 {
+            res += Int64::SIZE; // self.last_stable_offset
+        }
+        if version >= 5 {
+            res += Int64::SIZE; // self.log_start_offset
+        }
+        if version >= 4 {
+            res += NullableArray(Struct(version), version >= 12)
+                .calculate_size(self.aborted_transactions.as_deref());
+        }
+        if version >= 11 {
+            res += Int32::SIZE; // self.preferred_read_replica
+        }
+        res += NullableRecords(version >= 12).calculate_size(&self.records);
+        if version >= 12 {
+            let mut n = 0;
+            let mut bs = 0;
+            if let Some(diverging_epoch) = &self.diverging_epoch {
+                n += 1;
+                bs +=
+                    RawTaggedFieldWriter.calculate_field_size(0, Struct(version), diverging_epoch);
+            }
+            if let Some(current_leader) = &self.current_leader {
+                n += 1;
+                bs += RawTaggedFieldWriter.calculate_field_size(0, Struct(version), current_leader);
+            }
+            if let Some(snapshot_id) = &self.snapshot_id {
+                n += 1;
+                bs += RawTaggedFieldWriter.calculate_field_size(0, Struct(version), snapshot_id);
+            }
+            res += RawTaggedFieldList.calculate_size_with(n, bs, &self.unknown_tagged_fields);
+        }
+        res
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -217,7 +288,7 @@ impl Default for EpochEndOffset {
 }
 
 impl Serializable for EpochEndOffset {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 12 {
             Err(err_encode_message_unsupported(version, "EpochEndOffset"))?
         }
@@ -225,6 +296,14 @@ impl Serializable for EpochEndOffset {
         Int64.encode(buf, self.end_offset)?;
         RawTaggedFieldList.encode(buf, self.unknown_tagged_fields.as_slice())?;
         Ok(())
+    }
+
+    fn calculate_size(&self, _version: i16) -> usize {
+        let mut res = 0;
+        res += Int32.calculate_size(self.epoch);
+        res += Int64.calculate_size(self.end_offset);
+        res += RawTaggedFieldList.calculate_size(self.unknown_tagged_fields.as_slice());
+        res
     }
 }
 
@@ -249,7 +328,7 @@ impl Default for LeaderIdAndEpoch {
 }
 
 impl Serializable for LeaderIdAndEpoch {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 12 {
             Err(err_encode_message_unsupported(version, "LeaderIdAndEpoch"))?
         }
@@ -257,6 +336,14 @@ impl Serializable for LeaderIdAndEpoch {
         Int32.encode(buf, self.leader_epoch)?;
         RawTaggedFieldList.encode(buf, self.unknown_tagged_fields.as_slice())?;
         Ok(())
+    }
+
+    fn calculate_size(&self, _version: i16) -> usize {
+        let mut res = 0;
+        res += Int32.calculate_size(self.leader_id);
+        res += Int32.calculate_size(self.leader_epoch);
+        res += RawTaggedFieldList.calculate_size(self.unknown_tagged_fields.as_slice());
+        res
     }
 }
 
@@ -279,7 +366,7 @@ impl Default for SnapshotId {
 }
 
 impl Serializable for SnapshotId {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 12 {
             Err(err_encode_message_unsupported(version, "SnapshotId"))?
         }
@@ -287,6 +374,14 @@ impl Serializable for SnapshotId {
         Int32.encode(buf, self.epoch)?;
         RawTaggedFieldList.encode(buf, self.unknown_tagged_fields.as_slice())?;
         Ok(())
+    }
+
+    fn calculate_size(&self, _version: i16) -> usize {
+        let mut res = 0;
+        res += Int64.calculate_size(self.end_offset);
+        res += Int32.calculate_size(self.epoch);
+        res += RawTaggedFieldList.calculate_size(self.unknown_tagged_fields.as_slice());
+        res
     }
 }
 
@@ -301,7 +396,7 @@ pub struct AbortedTransaction {
 }
 
 impl Serializable for AbortedTransaction {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 4 {
             Err(err_encode_message_unsupported(
                 version,
@@ -314,5 +409,15 @@ impl Serializable for AbortedTransaction {
             RawTaggedFieldList.encode(buf, self.unknown_tagged_fields.as_slice())?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int64.calculate_size(self.producer_id);
+        res += Int64.calculate_size(self.first_offset);
+        if version >= 12 {
+            res += RawTaggedFieldList.calculate_size(self.unknown_tagged_fields.as_slice());
+        }
+        res
     }
 }

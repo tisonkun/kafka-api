@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::BufMut;
-
 use crate::{codec::*, err_encode_message_unsupported};
 
 // Version 1 adds a per-topic error message string.
@@ -47,7 +45,7 @@ pub struct CreateTopicsResponse {
 }
 
 impl Serializable for CreateTopicsResponse {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 2 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -56,6 +54,18 @@ impl Serializable for CreateTopicsResponse {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        if version >= 2 {
+            res += Int32.calculate_size(self.throttle_time_ms);
+        }
+        res += NullableArray(Struct(version), version >= 5).calculate_size(self.topics.as_slice());
+        if version >= 5 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }
 
@@ -82,7 +92,7 @@ pub struct CreatableTopicResult {
 }
 
 impl Serializable for CreatableTopicResult {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         NullableString(version >= 5).encode(buf, self.name.as_str())?;
         if version >= 7 {
             Uuid.encode(buf, self.topic_id)?;
@@ -148,7 +158,7 @@ pub struct CreatableTopicConfigs {
 }
 
 impl Serializable for CreatableTopicConfigs {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 5 {
             Err(err_encode_message_unsupported(
                 version,
@@ -162,5 +172,16 @@ impl Serializable for CreatableTopicConfigs {
         Bool.encode(buf, self.is_sensitive)?;
         RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         Ok(())
+    }
+
+    fn calculate_size(&self, _version: i16) -> usize {
+        let mut res = 0;
+        res += NullableString(true).calculate_size(self.name.as_str());
+        res += NullableString(true).calculate_size(self.value.as_deref());
+        res += Bool::SIZE; // self.read_only
+        res += Int8::SIZE; // self.config_source
+        res += Bool::SIZE; // self.is_sensitive
+        res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        res
     }
 }

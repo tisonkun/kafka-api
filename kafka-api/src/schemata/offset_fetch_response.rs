@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::BufMut;
-
 use crate::{codec::*, err_encode_message_unsupported};
 
 // Version 1 is the same as version 0.
@@ -50,7 +48,7 @@ pub struct OffsetFetchResponse {
 }
 
 impl Serializable for OffsetFetchResponse {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 3 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -68,6 +66,27 @@ impl Serializable for OffsetFetchResponse {
         }
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        if version >= 3 {
+            res += Int32.calculate_size(self.throttle_time_ms);
+        }
+        if version <= 7 {
+            res +=
+                NullableArray(Struct(version), version >= 6).calculate_size(self.topics.as_slice());
+        }
+        if (2..=7).contains(&version) {
+            res += Int16.calculate_size(self.error_code);
+        }
+        if version >= 8 {
+            res += NullableArray(Struct(version), true).calculate_size(self.groups.as_slice());
+        }
+        if version >= 6 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -81,7 +100,7 @@ pub struct OffsetFetchResponseTopic {
 }
 
 impl Serializable for OffsetFetchResponseTopic {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version > 7 {
             Err(err_encode_message_unsupported(
                 version,
@@ -94,6 +113,17 @@ impl Serializable for OffsetFetchResponseTopic {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += NullableString(version >= 6).calculate_size(self.name.as_str());
+        res +=
+            NullableArray(Struct(version), version >= 6).calculate_size(self.partitions.as_slice());
+        if version >= 6 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }
 
@@ -114,7 +144,7 @@ pub struct OffsetFetchResponsePartition {
 }
 
 impl Serializable for OffsetFetchResponsePartition {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int32.encode(buf, self.partition_index)?;
         Int32.encode(buf, self.committed_offset)?;
         if version >= 5 {
@@ -126,6 +156,21 @@ impl Serializable for OffsetFetchResponsePartition {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int32.calculate_size(self.partition_index);
+        res += Int32.calculate_size(self.committed_offset);
+        if version >= 5 {
+            res += Int32.calculate_size(self.committed_leader_epoch);
+        }
+        res += NullableString(version >= 6).calculate_size(self.metadata.as_deref());
+        res += Int16.calculate_size(self.error_code);
+        if version >= 6 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }
 
@@ -142,7 +187,7 @@ pub struct OffsetFetchResponseGroup {
 }
 
 impl Serializable for OffsetFetchResponseGroup {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 8 {
             Err(err_encode_message_unsupported(
                 version,
@@ -154,6 +199,15 @@ impl Serializable for OffsetFetchResponseGroup {
         Int16.encode(buf, self.error_code)?;
         RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += NullableString(true).calculate_size(self.group_id.as_str());
+        res += NullableArray(Struct(version), true).calculate_size(self.topics.as_slice());
+        res += Int16.calculate_size(self.error_code);
+        res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        res
     }
 }
 
@@ -168,11 +222,19 @@ pub struct OffsetFetchResponseTopics {
 }
 
 impl Serializable for OffsetFetchResponseTopics {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         NullableString(true).encode(buf, self.name.as_str())?;
         NullableArray(Struct(version), true).encode(buf, self.partitions.as_slice())?;
         RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += NullableString(true).calculate_size(self.name.as_str());
+        res += NullableArray(Struct(version), true).calculate_size(self.partitions.as_slice());
+        res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        res
     }
 }
 
@@ -193,7 +255,7 @@ pub struct OffsetFetchResponsePartitions {
 }
 
 impl Serializable for OffsetFetchResponsePartitions {
-    fn write<B: BufMut>(&self, buf: &mut B, _version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, _version: i16) -> io::Result<()> {
         Int32.encode(buf, self.partition_index)?;
         Int64.encode(buf, self.committed_offset)?;
         Int32.encode(buf, self.committed_leader_epoch)?;
@@ -201,5 +263,16 @@ impl Serializable for OffsetFetchResponsePartitions {
         Int16.encode(buf, self.error_code)?;
         RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         Ok(())
+    }
+
+    fn calculate_size(&self, _version: i16) -> usize {
+        let mut res = 0;
+        res += Int32.calculate_size(self.partition_index);
+        res += Int64.calculate_size(self.committed_offset);
+        res += Int32.calculate_size(self.committed_leader_epoch);
+        res += NullableString(true).calculate_size(self.metadata.as_deref());
+        res += Int16.calculate_size(self.error_code);
+        res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        res
     }
 }

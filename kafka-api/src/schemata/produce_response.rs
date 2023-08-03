@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::BufMut;
-
 use crate::{codec::*, err_encode_message_unsupported};
 
 // Version 1 added the throttle time.
@@ -46,7 +44,7 @@ pub struct ProduceResponse {
 }
 
 impl Serializable for ProduceResponse {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         NullableArray(Struct(version), version >= 9).encode(buf, self.responses.as_slice())?;
         if version > 1 {
             Int32.encode(buf, self.throttle_time_ms)?;
@@ -55,6 +53,19 @@ impl Serializable for ProduceResponse {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res +=
+            NullableArray(Struct(version), version >= 9).calculate_size(self.responses.as_slice());
+        if version > 1 {
+            res += Int32.calculate_size(self.throttle_time_ms);
+        }
+        if version >= 9 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }
 
@@ -69,7 +80,7 @@ pub struct TopicProduceResponse {
 }
 
 impl Serializable for TopicProduceResponse {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         NullableString(version >= 9).encode(buf, self.name.as_str())?;
         NullableArray(Struct(version), version >= 9)
             .encode(buf, self.partition_responses.as_slice())?;
@@ -77,6 +88,17 @@ impl Serializable for TopicProduceResponse {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += NullableString(version >= 9).calculate_size(self.name.as_str());
+        res += NullableArray(Struct(version), version >= 9)
+            .calculate_size(self.partition_responses.as_slice());
+        if version >= 9 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }
 
@@ -104,7 +126,7 @@ pub struct PartitionProduceResponse {
 }
 
 impl Serializable for PartitionProduceResponse {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int32.encode(buf, self.index)?;
         Int16.encode(buf, self.error_code)?;
         Int64.encode(buf, self.base_offset)?;
@@ -126,6 +148,30 @@ impl Serializable for PartitionProduceResponse {
         }
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int32.calculate_size(self.index);
+        res += Int16.calculate_size(self.error_code);
+        res += Int64.calculate_size(self.base_offset);
+        if version >= 2 {
+            res += Int64.calculate_size(self.log_append_time_ms);
+        }
+        if version >= 5 {
+            res += Int64.calculate_size(self.log_start_offset);
+        }
+        if version >= 8 {
+            res += NullableArray(Struct(version), version >= 9)
+                .calculate_size(self.record_errors.as_slice());
+        }
+        if version >= 8 {
+            res += NullableString(version >= 9).calculate_size(self.error_message.as_deref());
+        }
+        if version >= 9 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -139,7 +185,7 @@ pub struct BatchIndexAndErrorMessage {
 }
 
 impl Serializable for BatchIndexAndErrorMessage {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 8 {
             Err(err_encode_message_unsupported(
                 version,
@@ -152,5 +198,16 @@ impl Serializable for BatchIndexAndErrorMessage {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int32::SIZE; // self.batch_index
+        res +=
+            NullableString(version >= 9).calculate_size(self.batch_index_error_message.as_deref());
+        if version >= 9 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
     }
 }
