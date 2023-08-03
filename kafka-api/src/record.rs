@@ -57,7 +57,7 @@ pub const RECORD_BATCH_OVERHEAD: usize = RECORDS_OFFSET;
 pub const HEADER_SIZE_UP_TO_MAGIC: usize = MAGIC_OFFSET + MAGIC_LENGTH;
 pub const LOG_OVERHEAD: usize = LENGTH_OFFSET + LENGTH_LENGTH;
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Records {
     buf: ByteBuffer,
     batches: OnceCell<Vec<RecordBatch>>,
@@ -75,6 +75,12 @@ impl Clone for Records {
             buf: self.buf.clone(),
             batches: OnceCell::new(),
         }
+    }
+}
+
+impl Debug for Records {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self.batches.get_or_init(|| self.load_batches()), f)
     }
 }
 
