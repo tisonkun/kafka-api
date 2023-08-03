@@ -109,15 +109,15 @@ impl Serializable for CreatableTopicResult {
         let mut res = 0;
         res += NullableString(version >= 5).calculate_size(self.name.as_str());
         if version >= 7 {
-            res += Uuid.fixed_size(/* self.topic_id */);
+            res += Uuid::SIZE; // self.topic_id
         }
-        res += Int16.fixed_size(/* self.error_code */);
+        res += Int16::SIZE; // self.error_code
         if version >= 1 {
             res += NullableString(version >= 5).calculate_size(self.error_message.as_deref());
         }
         if version >= 5 {
-            res += Int32.fixed_size(/* self.num_partitions */);
-            res += Int16.fixed_size(/* self.replication_factor */);
+            res += Int32::SIZE; // self.num_partitions
+            res += Int16::SIZE; // self.replication_factor
             res += NullableArray(Struct(version), true).calculate_size(self.configs.as_slice());
         }
         if version >= 5 {

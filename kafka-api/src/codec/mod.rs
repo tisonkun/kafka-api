@@ -35,7 +35,7 @@ pub trait Encoder<T> {
 }
 
 pub trait FixedSizeEncoder {
-    fn fixed_size(&self) -> usize;
+    const SIZE: usize;
 }
 
 pub trait Deserializable: Sized {
@@ -231,10 +231,7 @@ macro_rules! define_ints_codec {
         }
 
         impl FixedSizeEncoder for $name {
-            #[inline]
-            fn fixed_size(&self) -> usize {
-                size_of::<$ty>()
-            }
+            const SIZE: usize = size_of::<$ty>();
         }
     };
 }
@@ -285,9 +282,7 @@ impl Encoder<bool> for Bool {
 }
 
 impl FixedSizeEncoder for Bool {
-    fn fixed_size(&self) -> usize {
-        size_of::<bool>()
-    }
+    const SIZE: usize = size_of::<bool>();
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -700,9 +695,7 @@ impl Encoder<uuid::Uuid> for Uuid {
 }
 
 impl FixedSizeEncoder for Uuid {
-    fn fixed_size(&self) -> usize {
-        16
-    }
+    const SIZE: usize = 16;
 }
 
 #[derive(Debug, Copy, Clone)]

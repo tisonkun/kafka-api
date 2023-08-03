@@ -82,11 +82,11 @@ impl Serializable for ApiVersionsResponse {
 
     fn calculate_size(&self, version: i16) -> usize {
         let mut res = 0;
-        res += Int16.fixed_size(/* self.error_code */);
+        res += Int16::SIZE; //self.error_code
         res +=
             NullableArray(Struct(version), version >= 3).calculate_size(self.api_keys.as_slice());
         if version >= 1 {
-            res += Int32.fixed_size(/* self.throttle_time_ms */);
+            res += Int32::SIZE; // self.throttle_time_ms
         }
         if version >= 3 {
             res += RawTaggedFieldList.calculate_size_with(
@@ -133,6 +133,17 @@ impl Serializable for ApiVersion {
         }
         Ok(())
     }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int16::SIZE; // self.api_key
+        res += Int16::SIZE; // self.min_version
+        res += Int16::SIZE; // self.max_version
+        if version >= 3 {
+            res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        }
+        res
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -160,6 +171,15 @@ impl Serializable for SupportedFeatureKey {
         Int16.encode(buf, self.max_version)?;
         RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         Ok(())
+    }
+
+    fn calculate_size(&self, _version: i16) -> usize {
+        let mut res = 0;
+        res += NullableString(true).calculate_size(self.name.as_ref());
+        res += Int16::SIZE; // self.min_version
+        res += Int16::SIZE; // self.max_version
+        res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
+        res
     }
 }
 
