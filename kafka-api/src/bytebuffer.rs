@@ -26,7 +26,7 @@ use bytes::Buf;
 pub struct ByteBuffer {
     start: usize,
     end: usize,
-    shared: Shared,
+    shared: Arc<Shared>,
 }
 
 impl Default for ByteBuffer {
@@ -176,16 +176,9 @@ impl Buf for ByteBuffer {
 #[derive(Debug, Clone)]
 struct Shared {
     ptr: *mut u8,
-    #[allow(unused)]
-    guard: Arc<DeallocateGuard>,
 }
 
-#[derive(Debug)]
-struct DeallocateGuard {
-    ptr: *mut u8,
-}
-
-impl Drop for DeallocateGuard {
+impl Drop for Shared {
     fn drop(&mut self) {
         unsafe { drop_in_place(self.ptr) }
     }
@@ -196,10 +189,7 @@ impl ByteBuffer {
         let mut me = ManuallyDrop::new(v);
         let (ptr, end) = (me.as_mut_ptr(), me.len());
         let start = 0;
-        let shared = Shared {
-            ptr: ptr.clone(),
-            guard: Arc::new(DeallocateGuard { ptr }),
-        };
+        let shared = Arc::new(Shared { ptr });
         ByteBuffer { start, end, shared }
     }
 }
