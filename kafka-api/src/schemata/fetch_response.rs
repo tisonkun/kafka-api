@@ -198,7 +198,7 @@ impl Serializable for PartitionData {
             Int64.encode(buf, self.last_stable_offset)?;
         }
         if version >= 5 {
-            Int64.encode(buf, self.log_start_offset)?
+            Int64.encode(buf, self.log_start_offset)?;
         }
         if version >= 4 {
             NullableArray(Struct(version), version >= 12)
@@ -226,6 +226,46 @@ impl Serializable for PartitionData {
             })?;
         }
         Ok(())
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
+        let mut res = 0;
+        res += Int32::SIZE; // self.partition_index
+        res += Int16::SIZE; // self.error_code
+        res += Int64::SIZE; // self.high_watermark
+        if version >= 4 {
+            res += Int64::SIZE; // self.last_stable_offset
+        }
+        if version >= 5 {
+            res += Int64::SIZE; // self.log_start_offset
+        }
+        if version >= 4 {
+            res += NullableArray(Struct(version), version >= 12)
+                .calculate_size(self.aborted_transactions.as_deref());
+        }
+        if version >= 11 {
+            res += Int32::SIZE; // self.preferred_read_replica
+        }
+        res += NullableRecords(version >= 12).calculate_size(&self.records);
+        if version >= 12 {
+            let mut n = 0;
+            let mut bs = 0;
+            if let Some(diverging_epoch) = &self.diverging_epoch {
+                n += 1;
+                bs +=
+                    RawTaggedFieldWriter.calculate_field_size(0, Struct(version), diverging_epoch);
+            }
+            if let Some(current_leader) = &self.current_leader {
+                n += 1;
+                bs += RawTaggedFieldWriter.calculate_field_size(0, Struct(version), current_leader);
+            }
+            if let Some(snapshot_id) = &self.snapshot_id {
+                n += 1;
+                bs += RawTaggedFieldWriter.calculate_field_size(0, Struct(version), snapshot_id);
+            }
+            res += RawTaggedFieldList.calculate_size_with(n, bs, &self.unknown_tagged_fields);
+        }
+        res
     }
 }
 
@@ -258,7 +298,7 @@ impl Serializable for EpochEndOffset {
         Ok(())
     }
 
-    fn calculate_size(&self, version: i16) -> usize {
+    fn calculate_size(&self, _version: i16) -> usize {
         let mut res = 0;
         res += Int32.calculate_size(self.epoch);
         res += Int64.calculate_size(self.end_offset);

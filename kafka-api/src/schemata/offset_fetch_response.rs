@@ -265,7 +265,7 @@ impl Serializable for OffsetFetchResponsePartitions {
         Ok(())
     }
 
-    fn calculate_size(&self, version: i16) -> usize {
+    fn calculate_size(&self, _version: i16) -> usize {
         let mut res = 0;
         res += Int32.calculate_size(self.partition_index);
         res += Int64.calculate_size(self.committed_offset);
