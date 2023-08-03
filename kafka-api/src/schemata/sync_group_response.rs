@@ -46,7 +46,7 @@ pub struct SyncGroupResponse {
 }
 
 impl Serializable for SyncGroupResponse {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 1 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }

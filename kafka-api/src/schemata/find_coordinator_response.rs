@@ -46,7 +46,7 @@ pub struct FindCoordinatorResponse {
 }
 
 impl Serializable for FindCoordinatorResponse {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 1 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -124,7 +124,7 @@ pub struct Coordinator {
 }
 
 impl Serializable for Coordinator {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version > 4 {
             Err(err_encode_message_unsupported(version, "Coordinator"))?
         }

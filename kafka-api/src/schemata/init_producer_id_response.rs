@@ -40,7 +40,7 @@ pub struct InitProducerIdResponse {
 }
 
 impl Serializable for InitProducerIdResponse {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int32.encode(buf, self.throttle_time_ms)?;
         Int16.encode(buf, self.error_code)?;
         Int64.encode(buf, self.producer_id)?;

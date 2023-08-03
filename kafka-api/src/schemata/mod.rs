@@ -133,11 +133,7 @@ pub enum Response {
 }
 
 impl Response {
-    pub fn encode<'a, B: Writable<'a>>(
-        &self,
-        header: RequestHeader,
-        buf: &mut B,
-    ) -> io::Result<()> {
+    pub fn encode<B: Writable>(&self, header: RequestHeader, buf: &mut B) -> io::Result<()> {
         let api_type = ApiMessageType::try_from(header.request_api_key)?;
         let api_version = header.request_api_version;
         let correlation_id = header.correlation_id;
@@ -175,7 +171,7 @@ impl Response {
         }
     }
 
-    fn do_encode<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn do_encode<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         match self {
             Response::ApiVersionsResponse(resp) => resp.write(buf, version)?,
             Response::CreateTopicsResponse(resp) => resp.write(buf, version)?,

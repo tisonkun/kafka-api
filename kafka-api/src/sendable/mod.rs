@@ -18,12 +18,12 @@ use bytes::BufMut;
 
 use crate::{bytebuffer::ByteBuffer, codec::writable::Writable, record::ReadOnlyRecords};
 
-pub struct SendBuilder<'a> {
-    sends: Vec<Sendable<'a>>,
+pub struct SendBuilder {
+    sends: Vec<Sendable>,
     bs: bytes::BytesMut,
 }
 
-impl<'a> Writable<'a> for SendBuilder<'a> {
+impl Writable for SendBuilder {
     fn write_i8(&mut self, n: i8) -> io::Result<()> {
         self.bs.put_i8(n);
         Ok(())
@@ -85,20 +85,22 @@ impl<'a> Writable<'a> for SendBuilder<'a> {
         Ok(())
     }
 
-    fn write_records(&mut self, r: &'a ReadOnlyRecords) -> io::Result<()> {
+    fn write_records(&mut self, r: &ReadOnlyRecords) -> io::Result<()> {
         self.flush_bytes();
+        // shallow clone - only metadata copied
+        let r = r.clone();
         self.sends.push(Sendable::Records(r));
         Ok(())
     }
 }
 
-impl<'a> Default for SendBuilder<'a> {
+impl Default for SendBuilder {
     fn default() -> Self {
         SendBuilder::new()
     }
 }
 
-impl<'a> SendBuilder<'a> {
+impl SendBuilder {
     pub fn new() -> Self {
         SendBuilder {
             sends: vec![],
@@ -106,7 +108,7 @@ impl<'a> SendBuilder<'a> {
         }
     }
 
-    pub fn finish(mut self) -> Vec<Sendable<'a>> {
+    pub fn finish(mut self) -> Vec<Sendable> {
         self.flush_bytes();
         self.sends
     }
@@ -119,13 +121,14 @@ impl<'a> SendBuilder<'a> {
     }
 }
 
-pub enum Sendable<'a> {
+#[derive(Debug)]
+pub enum Sendable {
     Bytes(bytes::Bytes),
     ByteBuffer(ByteBuffer),
-    Records(&'a ReadOnlyRecords),
+    Records(ReadOnlyRecords),
 }
 
-impl Sendable<'_> {
+impl Sendable {
     // io::Write cannot leverage the sendfile syscall if we want to copy bytes from a file to
     // socket. Rust seems doesn't have a good solution so we keep use io::Write here but open to
     // any other solution.
@@ -134,7 +137,7 @@ impl Sendable<'_> {
             Sendable::Bytes(bs) => writer.write_all(bs.as_ref()),
             Sendable::ByteBuffer(buf) => writer.write_all(buf.as_bytes()),
             Sendable::Records(r) => match r {
-                ReadOnlyRecords::ByteBuffer(r) => writer.write_all(r.buf.as_bytes()),
+                ReadOnlyRecords::ByteBuffer(r) => writer.write_all(r.as_bytes()),
             },
         }
     }

@@ -61,7 +61,7 @@ pub struct FetchResponse {
 }
 
 impl Serializable for FetchResponse {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 1 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -107,7 +107,7 @@ pub struct FetchableTopicResponse {
 }
 
 impl Serializable for FetchableTopicResponse {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version <= 12 {
             NullableString(version >= 12).encode(buf, self.topic.as_str())?;
         }
@@ -190,7 +190,7 @@ impl Default for PartitionData {
 }
 
 impl Serializable for PartitionData {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int32.encode(buf, self.partition_index)?;
         Int16.encode(buf, self.error_code)?;
         Int64.encode(buf, self.high_watermark)?;
@@ -288,7 +288,7 @@ impl Default for EpochEndOffset {
 }
 
 impl Serializable for EpochEndOffset {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 12 {
             Err(err_encode_message_unsupported(version, "EpochEndOffset"))?
         }
@@ -328,7 +328,7 @@ impl Default for LeaderIdAndEpoch {
 }
 
 impl Serializable for LeaderIdAndEpoch {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 12 {
             Err(err_encode_message_unsupported(version, "LeaderIdAndEpoch"))?
         }
@@ -366,7 +366,7 @@ impl Default for SnapshotId {
 }
 
 impl Serializable for SnapshotId {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 12 {
             Err(err_encode_message_unsupported(version, "SnapshotId"))?
         }
@@ -396,7 +396,7 @@ pub struct AbortedTransaction {
 }
 
 impl Serializable for AbortedTransaction {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 4 {
             Err(err_encode_message_unsupported(
                 version,

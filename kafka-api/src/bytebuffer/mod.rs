@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use core::slice;
-use std::{fmt::Debug, mem::ManuallyDrop, ops::RangeBounds, ptr::drop_in_place, sync::Arc};
+use std::{fmt::Debug, mem::ManuallyDrop, ops::RangeBounds, sync::Arc};
 
 use bytes::Buf;
 
@@ -24,6 +24,8 @@ mod impl_traits;
 #[derive(Debug, Clone)]
 struct Shared {
     ptr: *mut u8,
+    len: usize,
+    capacity: usize,
 }
 
 // shared ptr never changed + no alloc + in place mutations are managed
@@ -32,7 +34,7 @@ unsafe impl Sync for Shared {}
 
 impl Drop for Shared {
     fn drop(&mut self) {
-        unsafe { drop_in_place(self.ptr) }
+        unsafe { drop(Vec::from_raw_parts(self.ptr, self.len, self.capacity)) }
     }
 }
 
@@ -66,9 +68,9 @@ impl Buf for ByteBuffer {
 impl ByteBuffer {
     pub fn new(v: Vec<u8>) -> Self {
         let mut me = ManuallyDrop::new(v);
-        let (ptr, end) = (me.as_mut_ptr(), me.len());
-        let start = 0;
-        let shared = Arc::new(Shared { ptr });
+        let (ptr, len, capacity) = (me.as_mut_ptr(), me.len(), me.capacity());
+        let (start, end) = (0, len);
+        let shared = Arc::new(Shared { ptr, len, capacity });
         ByteBuffer { start, end, shared }
     }
 

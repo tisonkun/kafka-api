@@ -44,7 +44,7 @@ pub struct ProduceResponse {
 }
 
 impl Serializable for ProduceResponse {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         NullableArray(Struct(version), version >= 9).encode(buf, self.responses.as_slice())?;
         if version > 1 {
             Int32.encode(buf, self.throttle_time_ms)?;
@@ -80,7 +80,7 @@ pub struct TopicProduceResponse {
 }
 
 impl Serializable for TopicProduceResponse {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         NullableString(version >= 9).encode(buf, self.name.as_str())?;
         NullableArray(Struct(version), version >= 9)
             .encode(buf, self.partition_responses.as_slice())?;
@@ -126,7 +126,7 @@ pub struct PartitionProduceResponse {
 }
 
 impl Serializable for PartitionProduceResponse {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int32.encode(buf, self.index)?;
         Int16.encode(buf, self.error_code)?;
         Int64.encode(buf, self.base_offset)?;
@@ -185,7 +185,7 @@ pub struct BatchIndexAndErrorMessage {
 }
 
 impl Serializable for BatchIndexAndErrorMessage {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 8 {
             Err(err_encode_message_unsupported(
                 version,

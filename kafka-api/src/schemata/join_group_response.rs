@@ -60,7 +60,7 @@ pub struct JoinGroupResponse {
 }
 
 impl Serializable for JoinGroupResponse {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 2 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -122,7 +122,7 @@ pub struct JoinGroupResponseMember {
 }
 
 impl Serializable for JoinGroupResponseMember {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         NullableString(version >= 6).encode(buf, self.member_id.as_str())?;
         if version >= 5 {
             NullableString(version >= 6).encode(buf, self.group_instance_id.as_deref())?;

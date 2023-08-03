@@ -23,7 +23,7 @@ use std::{
 use bytes::Buf;
 use kafka_api::{bytebuffer::ByteBuffer, sendable::SendBuilder, Request};
 use simplesrv::{Broker, BrokerMeta, ClientInfo, ClusterMeta};
-use tracing::{debug, error, error_span, info, Level};
+use tracing::{debug, error, error_span, info, trace, Level};
 
 fn main() -> io::Result<()> {
     tracing_subscriber::fmt()
@@ -100,6 +100,7 @@ fn dispatch(mut socket: TcpStream, broker: Arc<Mutex<Broker>>) -> io::Result<()>
         let mut builder = SendBuilder::new();
         response.encode(header, &mut builder)?;
         let sends = builder.finish();
+        trace!("ToSend {sends:?}");
         for send in sends {
             send.write_to(&mut socket)?;
         }

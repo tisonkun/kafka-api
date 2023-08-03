@@ -29,7 +29,7 @@ pub trait Decoder<T: Sized> {
 }
 
 pub trait Encoder<T> {
-    fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: T) -> io::Result<()>;
+    fn encode<B: Writable>(&self, buf: &mut B, value: T) -> io::Result<()>;
     fn calculate_size(&self, value: T) -> usize;
 }
 
@@ -42,7 +42,7 @@ pub trait Deserializable: Sized {
 }
 
 pub trait Serializable: Sized {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()>;
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()>;
 
     fn calculate_size(&self, version: i16) -> usize;
 }
@@ -58,8 +58,7 @@ pub(super) struct RawTaggedFieldWriter;
 
 impl RawTaggedFieldWriter {
     pub(super) fn write_field<
-        'a,
-        B: Writable<'a>,
+        B: Writable,
         T: Copy, // primitive or reference
         E: Encoder<T>,
     >(
@@ -88,7 +87,7 @@ impl RawTaggedFieldWriter {
         res + size
     }
 
-    fn write_byte_buffer<'a, B: Writable<'a>>(
+    fn write_byte_buffer<B: Writable>(
         &self,
         buf: &mut B,
         tag: i32,
@@ -133,7 +132,7 @@ impl RawTaggedFieldList {
         Ok(res)
     }
 
-    pub(super) fn encode_with<'a, B: Writable<'a>, F>(
+    pub(super) fn encode_with<B: Writable, F>(
         &self,
         buf: &mut B,
         n: usize, // extra fields
@@ -175,11 +174,7 @@ impl Decoder<Vec<RawTaggedField>> for RawTaggedFieldList {
 }
 
 impl Encoder<&[RawTaggedField]> for RawTaggedFieldList {
-    fn encode<'a, B: Writable<'a>>(
-        &self,
-        buf: &mut B,
-        fields: &[RawTaggedField],
-    ) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, fields: &[RawTaggedField]) -> io::Result<()> {
         self.encode_with(buf, 0, fields, |_| Ok(()))
     }
 
@@ -207,7 +202,7 @@ macro_rules! define_ints_codec {
         }
 
         impl Encoder<$ty> for $name {
-            fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: $ty) -> io::Result<()> {
+            fn encode<B: Writable>(&self, buf: &mut B, value: $ty) -> io::Result<()> {
                 self.encode(buf, &value)
             }
 
@@ -218,7 +213,7 @@ macro_rules! define_ints_codec {
         }
 
         impl Encoder<&$ty> for $name {
-            fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: &$ty) -> io::Result<()> {
+            fn encode<B: Writable>(&self, buf: &mut B, value: &$ty) -> io::Result<()> {
                 buf.$put(*value)
             }
 
@@ -262,7 +257,7 @@ impl Decoder<bool> for Bool {
 }
 
 impl Encoder<bool> for Bool {
-    fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: bool) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: bool) -> io::Result<()> {
         buf.write_u8(value as u8)?;
         Ok(())
     }
@@ -286,7 +281,7 @@ impl Decoder<i32> for VarInt {
 }
 
 impl Encoder<i32> for VarInt {
-    fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: i32) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: i32) -> io::Result<()> {
         buf.write_unsigned_varint(value)
     }
 
@@ -312,7 +307,7 @@ impl Decoder<i64> for VarLong {
 }
 
 impl Encoder<i64> for VarLong {
-    fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: i64) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: i64) -> io::Result<()> {
         buf.write_unsigned_varlong(value)
     }
 
@@ -360,7 +355,7 @@ impl Decoder<Option<String>> for NullableString {
 }
 
 impl Encoder<Option<&str>> for NullableString {
-    fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: Option<&str>) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: Option<&str>) -> io::Result<()> {
         write_slice(buf, value.map(|s| s.as_bytes()), self.0)
     }
 
@@ -370,7 +365,7 @@ impl Encoder<Option<&str>> for NullableString {
 }
 
 impl Encoder<&str> for NullableString {
-    fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: &str) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: &str) -> io::Result<()> {
         self.encode(buf, Some(value))
     }
 
@@ -408,12 +403,8 @@ impl Decoder<Option<MutableRecords>> for NullableRecords {
     }
 }
 
-impl<'b> Encoder<Option<&'b ReadOnlyRecords>> for NullableRecords {
-    fn encode<'a, B: Writable<'a>>(
-        &self,
-        buf: &mut B,
-        value: Option<&'b ReadOnlyRecords>,
-    ) -> io::Result<()> {
+impl Encoder<Option<&ReadOnlyRecords>> for NullableRecords {
+    fn encode<B: Writable>(&self, buf: &mut B, value: Option<&ReadOnlyRecords>) -> io::Result<()> {
         match value {
             None => {
                 if self.0 {
@@ -448,7 +439,7 @@ impl<'b> Encoder<Option<&'b ReadOnlyRecords>> for NullableRecords {
 }
 
 impl Encoder<&ReadOnlyRecords> for NullableRecords {
-    fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: &ReadOnlyRecords) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: &ReadOnlyRecords) -> io::Result<()> {
         self.encode(buf, Some(value))
     }
 
@@ -472,11 +463,7 @@ impl Decoder<Option<ByteBuffer>> for NullableBytes {
 }
 
 impl Encoder<Option<&ByteBuffer>> for NullableBytes {
-    fn encode<'a, B: Writable<'a>>(
-        &self,
-        buf: &mut B,
-        value: Option<&ByteBuffer>,
-    ) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: Option<&ByteBuffer>) -> io::Result<()> {
         write_slice(buf, value.map(|bs| bs.as_bytes()), self.0)
     }
 
@@ -486,7 +473,7 @@ impl Encoder<Option<&ByteBuffer>> for NullableBytes {
 }
 
 impl Encoder<&ByteBuffer> for NullableBytes {
-    fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: &ByteBuffer) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: &ByteBuffer) -> io::Result<()> {
         self.encode(buf, Some(value))
     }
 
@@ -506,11 +493,7 @@ fn slice_size(slice: Option<&[u8]>, flexible: bool) -> usize {
     }
 }
 
-fn write_slice<'a, B: Writable<'a>>(
-    buf: &mut B,
-    slice: Option<&[u8]>,
-    flexible: bool,
-) -> io::Result<()> {
+fn write_slice<B: Writable>(buf: &mut B, slice: Option<&[u8]>, flexible: bool) -> io::Result<()> {
     match slice {
         None => {
             if flexible {
@@ -584,7 +567,7 @@ impl<T, E: Decoder<T>> Decoder<Option<Vec<T>>> for NullableArray<E> {
 }
 
 impl<T, E: for<'a> Encoder<&'a T>> Encoder<Option<&[T]>> for NullableArray<E> {
-    fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: Option<&[T]>) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: Option<&[T]>) -> io::Result<()> {
         match value {
             None => {
                 if self.1 {
@@ -617,7 +600,7 @@ impl<T, E: for<'a> Encoder<&'a T>> Encoder<Option<&[T]>> for NullableArray<E> {
 }
 
 impl<T, E: for<'a> Encoder<&'a T>> Encoder<&[T]> for NullableArray<E> {
-    fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: &[T]) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: &[T]) -> io::Result<()> {
         if self.1 {
             VarInt.encode(buf, value.len() as i32 + 1)?;
         } else {
@@ -644,7 +627,7 @@ impl<T: Deserializable> Decoder<T> for Struct {
 }
 
 impl<T: Serializable> Encoder<&T> for Struct {
-    fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: &T) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: &T) -> io::Result<()> {
         value.write(buf, self.0)
     }
 
@@ -670,7 +653,7 @@ impl Decoder<uuid::Uuid> for Uuid {
 }
 
 impl Encoder<uuid::Uuid> for Uuid {
-    fn encode<'a, B: Writable<'a>>(&self, buf: &mut B, value: uuid::Uuid) -> io::Result<()> {
+    fn encode<B: Writable>(&self, buf: &mut B, value: uuid::Uuid) -> io::Result<()> {
         buf.write_uuid(value)
     }
 

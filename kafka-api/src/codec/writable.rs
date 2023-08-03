@@ -16,7 +16,7 @@ use std::io;
 
 use crate::{bytebuffer::ByteBuffer, record::ReadOnlyRecords};
 
-pub trait Writable<'a> {
+pub trait Writable {
     fn write_i8(&mut self, n: i8) -> io::Result<()>;
     fn write_i16(&mut self, n: i16) -> io::Result<()>;
     fn write_i32(&mut self, n: i32) -> io::Result<()>;
@@ -29,7 +29,7 @@ pub trait Writable<'a> {
     fn write_f64(&mut self, n: f64) -> io::Result<()>;
     fn write_slice(&mut self, src: &[u8]) -> io::Result<()>;
     fn write_bytes(&mut self, buf: &ByteBuffer) -> io::Result<()>;
-    fn write_records(&mut self, r: &'a ReadOnlyRecords) -> io::Result<()>;
+    fn write_records(&mut self, r: &ReadOnlyRecords) -> io::Result<()>;
 
     fn write_uuid(&mut self, n: uuid::Uuid) -> io::Result<()> {
         self.write_slice(n.as_ref())

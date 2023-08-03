@@ -51,7 +51,7 @@ pub struct ApiVersionsResponse {
 }
 
 impl Serializable for ApiVersionsResponse {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int16.encode(buf, self.error_code)?;
         NullableArray(Struct(version), version >= 3).encode(buf, self.api_keys.as_slice())?;
         if version >= 1 {
@@ -122,7 +122,7 @@ pub struct ApiVersion {
 }
 
 impl Serializable for ApiVersion {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int16.encode(buf, self.api_key)?;
         Int16.encode(buf, self.min_version)?;
         Int16.encode(buf, self.max_version)?;
@@ -157,7 +157,7 @@ pub struct SupportedFeatureKey {
 }
 
 impl Serializable for SupportedFeatureKey {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version > 3 {
             Err(err_encode_message_unsupported(
                 version,
@@ -194,7 +194,7 @@ pub struct FinalizedFeatureKey {
 }
 
 impl Serializable for FinalizedFeatureKey {
-    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<B: Writable>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version > 3 {
             Err(err_encode_message_unsupported(
                 version,

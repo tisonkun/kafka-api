@@ -64,6 +64,57 @@ pub struct MutableRecords {
     batches: OnceCell<Vec<RecordBatch>>,
 }
 
+impl Clone for MutableRecords {
+    /// ATTENTION - Cloning Records is a heavy operation.
+    ///
+    /// Records is a public struct and it has a [MutableRecords::mut_batches] method that modifies
+    /// the underlying [ByteBuffer]. If we only do a shallow clone, then two Records that
+    /// doesn't have any ownership overlapping can modify the same underlying slice.
+    ///
+    /// Generally, Records users iterate over batches with [MutableRecords::batches] or
+    /// [MutableRecords::mut_batches], and pass ownership instead of clone Records.
+    ///
+    /// This clone behavior is similar to clone a [Vec].
+    fn clone(&self) -> Self {
+        warn!("Cloning mutable records is a heavy operation and not encouraged.");
+        MutableRecords {
+            buf: ByteBuffer::new(self.buf.to_vec()),
+            batches: OnceCell::new(),
+        }
+    }
+}
+
+impl Debug for MutableRecords {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self.batches.get_or_init(|| load_batches(&self.buf)), f)
+    }
+}
+
+impl MutableRecords {
+    pub fn new(buf: ByteBuffer) -> Self {
+        let batches = OnceCell::new();
+        MutableRecords { buf, batches }
+    }
+
+    pub fn freeze(self) -> ReadOnlyRecords {
+        ReadOnlyRecords::ByteBuffer(ByteBufferRecords::new(self.buf))
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        self.buf.as_bytes()
+    }
+
+    pub fn mut_batches(&mut self) -> IterMut<'_, RecordBatch> {
+        self.batches.get_or_init(|| load_batches(&self.buf));
+        // SAFETY - init above
+        unsafe { self.batches.get_mut().unwrap_unchecked() }.iter_mut()
+    }
+
+    pub fn batches(&self) -> Iter<'_, RecordBatch> {
+        self.batches.get_or_init(|| load_batches(&self.buf)).iter()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ReadOnlyRecords {
     ByteBuffer(ByteBufferRecords),
@@ -81,28 +132,24 @@ impl ReadOnlyRecords {
             ReadOnlyRecords::ByteBuffer(r) => r.buf.len(),
         }
     }
+
+    pub fn batches(&self) -> Iter<'_, RecordBatch> {
+        match self {
+            ReadOnlyRecords::ByteBuffer(r) => r.batches(),
+        }
+    }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct ByteBufferRecords {
-    pub(crate) buf: ByteBuffer,
+    buf: ByteBuffer,
+    batches: OnceCell<Vec<RecordBatch>>,
 }
 
-impl Clone for MutableRecords {
-    /// ATTENTION - Cloning Records is a heavy operation.
-    ///
-    /// Records is a public struct and it has a [MutableRecords::mut_batches] method that modifies
-    /// the underlying [ByteBuffer]. If we only do a shallow clone, then two Records that
-    /// doesn't have any ownership overlapping can modify the same underlying slice.
-    ///
-    /// Generally, Records users iterate over batches with [MutableRecords::batches] or
-    /// [MutableRecords::mut_batches], and pass ownership instead of clone Records.
-    ///
-    /// This clone behavior is similar to clone a [Vec].
+impl Clone for ByteBufferRecords {
     fn clone(&self) -> Self {
-        warn!("Cloning records is a heavy operation and not encouraged.");
-        MutableRecords {
-            buf: ByteBuffer::new(self.buf.to_vec()),
+        ByteBufferRecords {
+            buf: self.buf.clone(),
             batches: OnceCell::new(),
         }
     }
@@ -114,30 +161,14 @@ impl Debug for ByteBufferRecords {
     }
 }
 
-impl Debug for MutableRecords {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(self.batches.get_or_init(|| load_batches(&self.buf)), f)
-    }
-}
-
-impl MutableRecords {
-    pub fn new(buf: ByteBuffer) -> Self {
+impl ByteBufferRecords {
+    fn new(buf: ByteBuffer) -> ByteBufferRecords {
         let batches = OnceCell::new();
-        MutableRecords { buf, batches }
-    }
-
-    pub fn freeze(self) -> ReadOnlyRecords {
-        ReadOnlyRecords::ByteBuffer(ByteBufferRecords { buf: self.buf })
+        ByteBufferRecords { buf, batches }
     }
 
     pub fn as_bytes(&self) -> &[u8] {
         self.buf.as_bytes()
-    }
-
-    pub fn mut_batches(&mut self) -> IterMut<'_, RecordBatch> {
-        self.batches.get_or_init(|| load_batches(&self.buf));
-        // SAFETY - init above
-        unsafe { self.batches.get_mut().unwrap_unchecked() }.iter_mut()
     }
 
     pub fn batches(&self) -> Iter<'_, RecordBatch> {
