@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::BufMut;
-
 use crate::{codec::*, err_decode_message_null};
 
 // Version 1 adds fields for the rack of each broker, the controller id, and
@@ -65,7 +63,7 @@ pub struct MetadataResponse {
 }
 
 impl Serializable for MetadataResponse {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 3 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -102,7 +100,7 @@ pub struct MetadataResponseBroker {
 }
 
 impl Serializable for MetadataResponseBroker {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int32.encode(buf, self.node_id)?;
         NullableString(version >= 9).encode(buf, self.host.as_str())?;
         Int32.encode(buf, self.port)?;
@@ -135,7 +133,7 @@ pub struct MetadataResponseTopic {
 }
 
 impl Serializable for MetadataResponseTopic {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int16.encode(buf, self.error_code)?;
         match self.name {
             None => {
@@ -187,7 +185,7 @@ pub struct MetadataResponsePartition {
 }
 
 impl Serializable for MetadataResponsePartition {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int16.encode(buf, self.error_code)?;
         Int32.encode(buf, self.partition_index)?;
         Int32.encode(buf, self.leader_id)?;

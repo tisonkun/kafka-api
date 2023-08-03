@@ -14,14 +14,14 @@
 
 use std::{
     io,
-    io::{Read, Write},
+    io::Read,
     mem::size_of,
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{Arc, Mutex},
 };
 
 use bytes::Buf;
-use kafka_api::{bytebuffer::ByteBuffer, Request};
+use kafka_api::{bytebuffer::ByteBuffer, sendable::SendBuilder, Request};
 use simplesrv::{Broker, BrokerMeta, ClientInfo, ClusterMeta};
 use tracing::{debug, error, error_span, info, Level};
 
@@ -97,8 +97,11 @@ fn dispatch(mut socket: TcpStream, broker: Arc<Mutex<Broker>>) -> io::Result<()>
             let mut broker = broker.lock().unwrap();
             broker.reply(client_info, header.clone(), request)
         };
-        let mut bs = bytes::BytesMut::new();
-        response.encode(header, &mut bs)?;
-        socket.write_all(bs.as_ref())?;
+        let mut builder = SendBuilder::new();
+        response.encode(header, &mut builder)?;
+        let sends = builder.finish();
+        for send in sends {
+            send.write_to(&mut socket)?;
+        }
     }
 }

@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::BufMut;
-
 use crate::{codec::*, err_encode_message_unsupported};
 
 // Version 1 adds a per-topic error message string.
@@ -47,7 +45,7 @@ pub struct CreateTopicsResponse {
 }
 
 impl Serializable for CreateTopicsResponse {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 2 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -82,7 +80,7 @@ pub struct CreatableTopicResult {
 }
 
 impl Serializable for CreatableTopicResult {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         NullableString(version >= 5).encode(buf, self.name.as_str())?;
         if version >= 7 {
             Uuid.encode(buf, self.topic_id)?;
@@ -148,7 +146,7 @@ pub struct CreatableTopicConfigs {
 }
 
 impl Serializable for CreatableTopicConfigs {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 5 {
             Err(err_encode_message_unsupported(
                 version,

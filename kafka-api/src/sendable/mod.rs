@@ -92,17 +92,30 @@ impl<'a> Writable<'a> for SendBuilder<'a> {
     }
 }
 
+impl<'a> Default for SendBuilder<'a> {
+    fn default() -> Self {
+        SendBuilder::new()
+    }
+}
+
 impl<'a> SendBuilder<'a> {
-    fn flush_bytes(&mut self) {
-        if !self.bs.is_empty() {
-            let bs = self.bs.split().freeze();
-            self.sends.push(Sendable::Bytes(bs));
+    pub fn new() -> Self {
+        SendBuilder {
+            sends: vec![],
+            bs: bytes::BytesMut::new(),
         }
     }
 
     pub fn finish(mut self) -> Vec<Sendable<'a>> {
         self.flush_bytes();
         self.sends
+    }
+
+    fn flush_bytes(&mut self) {
+        if !self.bs.is_empty() {
+            let bs = self.bs.split().freeze();
+            self.sends.push(Sendable::Bytes(bs));
+        }
     }
 }
 

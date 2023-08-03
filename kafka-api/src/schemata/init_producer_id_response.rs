@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::BufMut;
-
 use crate::codec::*;
 
 // Starting in version 1, on quota violation, brokers send out responses before throttling.
@@ -42,7 +40,7 @@ pub struct InitProducerIdResponse {
 }
 
 impl Serializable for InitProducerIdResponse {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int32.encode(buf, self.throttle_time_ms)?;
         Int16.encode(buf, self.error_code)?;
         Int64.encode(buf, self.producer_id)?;

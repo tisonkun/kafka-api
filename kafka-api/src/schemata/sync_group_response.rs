@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::BufMut;
-
 use crate::{bytebuffer::ByteBuffer, codec::*};
 
 // Version 1 adds throttle time.
@@ -48,7 +46,7 @@ pub struct SyncGroupResponse {
 }
 
 impl Serializable for SyncGroupResponse {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 1 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }

@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::BufMut;
-
 use crate::codec::*;
 
 // Version 1 is the first flexible version.
@@ -29,7 +27,7 @@ pub struct ResponseHeader {
 }
 
 impl Serializable for ResponseHeader {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int32.encode(buf, self.correlation_id)?;
         if version >= 1 {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;

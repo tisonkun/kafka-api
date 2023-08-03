@@ -133,34 +133,61 @@ pub enum Response {
 }
 
 impl Response {
-    pub fn encode<B: bytes::BufMut>(&self, header: RequestHeader, bs: &mut B) -> io::Result<()> {
+    pub fn encode<'a, B: Writable<'a>>(
+        &self,
+        header: RequestHeader,
+        buf: &mut B,
+    ) -> io::Result<()> {
         let api_type = ApiMessageType::try_from(header.request_api_key)?;
         let api_version = header.request_api_version;
         let correlation_id = header.correlation_id;
 
-        let mut buf = vec![];
         let response_header_version = api_type.response_header_version(api_version);
         let response_header = ResponseHeader {
             correlation_id,
             unknown_tagged_fields: vec![],
         };
-        response_header.write(&mut buf, response_header_version)?;
 
+        // 1. total size
+        let size = self.calculate_size(api_version)
+            + response_header.calculate_size(response_header_version);
+        Int32.encode(buf, size as i32)?;
+
+        // 2. response header
+        response_header.write(buf, response_header_version)?;
+
+        // 3. response body
+        self.do_encode(buf, api_version)
+    }
+
+    fn calculate_size(&self, version: i16) -> usize {
         match self {
-            Response::ApiVersionsResponse(resp) => resp.write(&mut buf, api_version)?,
-            Response::CreateTopicsResponse(resp) => resp.write(&mut buf, api_version)?,
-            Response::FindCoordinatorResponse(resp) => resp.write(&mut buf, api_version)?,
-            Response::FetchResponse(resp) => resp.write(&mut buf, api_version)?,
-            Response::InitProducerIdResponse(resp) => resp.write(&mut buf, api_version)?,
-            Response::JoinGroupResponse(resp) => resp.write(&mut buf, api_version)?,
-            Response::MetadataResponse(resp) => resp.write(&mut buf, api_version)?,
-            Response::OffsetFetchResponse(resp) => resp.write(&mut buf, api_version)?,
-            Response::ProduceResponse(resp) => resp.write(&mut buf, api_version)?,
-            Response::SyncGroupResponse(resp) => resp.write(&mut buf, api_version)?,
+            Response::ApiVersionsResponse(resp) => resp.calculate_size(version),
+            Response::CreateTopicsResponse(resp) => resp.calculate_size(version),
+            Response::FindCoordinatorResponse(resp) => resp.calculate_size(version),
+            Response::FetchResponse(resp) => resp.calculate_size(version),
+            Response::InitProducerIdResponse(resp) => resp.calculate_size(version),
+            Response::JoinGroupResponse(resp) => resp.calculate_size(version),
+            Response::MetadataResponse(resp) => resp.calculate_size(version),
+            Response::OffsetFetchResponse(resp) => resp.calculate_size(version),
+            Response::ProduceResponse(resp) => resp.calculate_size(version),
+            Response::SyncGroupResponse(resp) => resp.calculate_size(version),
         }
+    }
 
-        Int32.encode(bs, buf.len() as i32)?;
-        bs.put_slice(buf.as_slice());
+    fn do_encode<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+        match self {
+            Response::ApiVersionsResponse(resp) => resp.write(buf, version)?,
+            Response::CreateTopicsResponse(resp) => resp.write(buf, version)?,
+            Response::FindCoordinatorResponse(resp) => resp.write(buf, version)?,
+            Response::FetchResponse(resp) => resp.write(buf, version)?,
+            Response::InitProducerIdResponse(resp) => resp.write(buf, version)?,
+            Response::JoinGroupResponse(resp) => resp.write(buf, version)?,
+            Response::MetadataResponse(resp) => resp.write(buf, version)?,
+            Response::OffsetFetchResponse(resp) => resp.write(buf, version)?,
+            Response::ProduceResponse(resp) => resp.write(buf, version)?,
+            Response::SyncGroupResponse(resp) => resp.write(buf, version)?,
+        }
         Ok(())
     }
 }

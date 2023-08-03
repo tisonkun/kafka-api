@@ -16,7 +16,7 @@ extern crate core;
 
 use std::{fmt::Display, io};
 
-pub use codec::{Deserializable, RawTaggedField, Readable, Serializable};
+pub use codec::{Deserializable, RawTaggedField, Readable, Serializable, Writable};
 pub use schemata::*;
 
 pub mod apikey;

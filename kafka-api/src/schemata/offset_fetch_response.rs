@@ -14,8 +14,6 @@
 
 use std::io;
 
-use bytes::BufMut;
-
 use crate::{codec::*, err_encode_message_unsupported};
 
 // Version 1 is the same as version 0.
@@ -50,7 +48,7 @@ pub struct OffsetFetchResponse {
 }
 
 impl Serializable for OffsetFetchResponse {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version >= 3 {
             Int32.encode(buf, self.throttle_time_ms)?;
         }
@@ -81,7 +79,7 @@ pub struct OffsetFetchResponseTopic {
 }
 
 impl Serializable for OffsetFetchResponseTopic {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version > 7 {
             Err(err_encode_message_unsupported(
                 version,
@@ -114,7 +112,7 @@ pub struct OffsetFetchResponsePartition {
 }
 
 impl Serializable for OffsetFetchResponsePartition {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         Int32.encode(buf, self.partition_index)?;
         Int32.encode(buf, self.committed_offset)?;
         if version >= 5 {
@@ -142,7 +140,7 @@ pub struct OffsetFetchResponseGroup {
 }
 
 impl Serializable for OffsetFetchResponseGroup {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         if version < 8 {
             Err(err_encode_message_unsupported(
                 version,
@@ -168,7 +166,7 @@ pub struct OffsetFetchResponseTopics {
 }
 
 impl Serializable for OffsetFetchResponseTopics {
-    fn write<B: BufMut>(&self, buf: &mut B, version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, version: i16) -> io::Result<()> {
         NullableString(true).encode(buf, self.name.as_str())?;
         NullableArray(Struct(version), true).encode(buf, self.partitions.as_slice())?;
         RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
@@ -193,7 +191,7 @@ pub struct OffsetFetchResponsePartitions {
 }
 
 impl Serializable for OffsetFetchResponsePartitions {
-    fn write<B: BufMut>(&self, buf: &mut B, _version: i16) -> io::Result<()> {
+    fn write<'a, B: Writable<'a>>(&self, buf: &mut B, _version: i16) -> io::Result<()> {
         Int32.encode(buf, self.partition_index)?;
         Int64.encode(buf, self.committed_offset)?;
         Int32.encode(buf, self.committed_leader_epoch)?;
