@@ -13,8 +13,9 @@
 // limitations under the License.
 
 use std::{
+    cell::RefCell,
     fmt::{Debug, Formatter},
-    io,
+    slice::IterMut,
 };
 
 use bytes::{Buf, BufMut};
@@ -22,7 +23,6 @@ use bytes::{Buf, BufMut};
 use crate::{
     bytebuffer::ByteBuffer,
     codec::{Decoder, RecordList},
-    err_codec_message,
 };
 
 pub const BASE_OFFSET_OFFSET: usize = 0;
@@ -57,9 +57,10 @@ pub const RECORD_BATCH_OVERHEAD: usize = RECORDS_OFFSET;
 pub const HEADER_SIZE_UP_TO_MAGIC: usize = MAGIC_OFFSET + MAGIC_LENGTH;
 pub const LOG_OVERHEAD: usize = LENGTH_OFFSET + LENGTH_LENGTH;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct Records {
     buf: ByteBuffer,
+    batches: RefCell<Vec<RecordBatch>>,
 }
 
 impl AsRef<[u8]> for Records {
@@ -68,49 +69,64 @@ impl AsRef<[u8]> for Records {
     }
 }
 
-impl Records {
-    pub fn new(buf: ByteBuffer) -> Self {
-        Records { buf }
-    }
-
-    pub fn batches(&self) -> io::Result<Vec<RecordBatch>> {
-        let mut records = vec![];
-        let mut offset = 0;
-        let mut remaining = self.buf.len() - offset;
-        while remaining > 0 {
-            if remaining < HEADER_SIZE_UP_TO_MAGIC {
-                Err(err_codec_message(format!(
-                    "no enough bytes when decode records (remaining: {})",
-                    remaining
-                )))?
-            }
-
-            let record_size = self.buf.slice(LENGTH_OFFSET..).get_i32();
-            let batch_size = record_size as usize + LOG_OVERHEAD;
-            if remaining < batch_size {
-                Err(err_codec_message(format!(
-                    "no enough bytes when decode records (remaining: {})",
-                    remaining
-                )))?
-            }
-
-            let record = match self.buf.slice(MAGIC_OFFSET..).get_i8() {
-                2 => {
-                    let buf = self.buf.slice(offset..offset + batch_size);
-                    offset += batch_size;
-                    remaining = self.buf.len() - offset;
-                    RecordBatch { buf }
-                }
-                v => unimplemented!("record batch version {}", v),
-            };
-
-            records.push(record);
+impl Clone for Records {
+    fn clone(&self) -> Self {
+        Records {
+            buf: self.buf.clone(),
+            batches: RefCell::default(),
         }
-        Ok(records)
     }
 }
 
-#[derive(Default, Clone)]
+impl Records {
+    pub fn new(buf: ByteBuffer) -> Self {
+        let batches = RefCell::new(vec![]);
+        Records { buf, batches }
+    }
+
+    pub fn batches(&self) -> IterMut<'_, RecordBatch> {
+        if self.batches.borrow().is_empty() {
+            let mut batches = self.batches.borrow_mut();
+
+            let mut offset = 0;
+            let mut remaining = self.buf.len() - offset;
+            while remaining > 0 {
+                assert!(
+                    remaining >= HEADER_SIZE_UP_TO_MAGIC,
+                    "no enough bytes when decode records (remaining: {})",
+                    remaining
+                );
+
+                let record_size = (&self.buf[LENGTH_OFFSET..]).get_i32();
+                let batch_size = record_size as usize + LOG_OVERHEAD;
+
+                assert!(
+                    remaining >= batch_size,
+                    "no enough bytes when decode records (remaining: {})",
+                    remaining
+                );
+
+                let record = match (&self.buf[MAGIC_OFFSET..]).get_i8() {
+                    2 => {
+                        let buf = self.buf.slice(offset..offset + batch_size);
+                        offset += batch_size;
+                        remaining -= batch_size;
+                        RecordBatch { buf }
+                    }
+                    v => unimplemented!("record batch version {}", v),
+                };
+
+                batches.push(record);
+            }
+        }
+
+        let batches = self.batches.as_ptr();
+        // SAFETY - self.batches.borrow_mut() must never be called again
+        unsafe { (&mut *batches).iter_mut() }
+    }
+}
+
+#[derive(Default)]
 pub struct RecordBatch {
     buf: ByteBuffer,
 }
@@ -128,10 +144,6 @@ impl Debug for RecordBatch {
 }
 
 impl RecordBatch {
-    pub fn copy_write_to<B: BufMut>(&self, buf: &mut B) {
-        buf.put_slice(self.buf.chunk());
-    }
-
     pub fn set_last_offset(&mut self, offset: i64) {
         let base_offset = offset - self.last_offset_delta() as i64;
         self.buf
@@ -218,7 +230,7 @@ mod tests {
     #[test]
     fn test_codec_records() -> io::Result<()> {
         let records = Records::new(ByteBuffer::new(RECORD.to_vec()));
-        let record_batches = records.batches()?;
+        let record_batches = records.batches().collect::<Vec<_>>();
         assert_eq!(record_batches.len(), 1);
         let record_batch = &record_batches[0];
         assert_eq!(record_batch.records_count(), 1);

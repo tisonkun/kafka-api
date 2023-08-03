@@ -18,12 +18,10 @@ use std::{
     sync::atomic::{AtomicI64, Ordering},
 };
 
-use bytes::BytesMut;
 use kafka_api::{
     api_versions_request::ApiVersionsRequest,
     api_versions_response::{ApiVersion, ApiVersionsResponse},
     apikey::ApiMessageType,
-    bytebuffer::ByteBuffer,
     create_topic_request::CreateTopicsRequest,
     create_topic_response::{CreatableTopicResult, CreateTopicsResponse},
     error::Error,
@@ -46,7 +44,7 @@ use kafka_api::{
     },
     produce_request::ProduceRequest,
     produce_response::{PartitionProduceResponse, ProduceResponse, TopicProduceResponse},
-    record::{RecordBatch, Records},
+    record::Records,
     request_header::RequestHeader,
     sync_group_request::SyncGroupRequest,
     sync_group_response::SyncGroupResponse,
@@ -206,7 +204,7 @@ pub struct Broker {
     cluster_meta: ClusterMeta,
     topics: BTreeMap<String, TopicMeta>,
     producers: AtomicI64,
-    topic_partition_store: BTreeMap<(uuid::Uuid, i32), (i64, Vec<RecordBatch>)>,
+    topic_partition_store: BTreeMap<(uuid::Uuid, i32), (i64, Vec<Records>)>,
     group_coordinator: GroupCoordinator,
 }
 
@@ -389,12 +387,12 @@ impl Broker {
                         .topic_partition_store
                         .get_mut(&(topic_meta.topic_id, idx))
                         .unwrap();
-                    for mut batch in records.batches().expect("malformed records") {
+                    for batch in records.batches() {
                         trace!("storing batch {batch:?} with last_offset {last_offset}");
                         *last_offset += batch.records_count() as i64;
                         batch.set_last_offset(*last_offset - 1);
-                        store.push(batch);
                     }
+                    store.push(records);
                 }
                 partition_responses.push(PartitionProduceResponse {
                     index: idx,
@@ -578,16 +576,27 @@ impl Broker {
                     .get(&(topic_id, idx))
                     .expect("partition not found");
                 let committed_index = partition.0;
-                let mut records = BytesMut::new();
-                for record in partition.1.iter() {
-                    record.copy_write_to(&mut records);
-                }
+                let fetch_offset = part.fetch_offset;
+                let records = partition
+                    .1
+                    .iter()
+                    .skip_while(|r| {
+                        for batch in r.batches() {
+                            let last_offset =
+                                batch.base_offset() + batch.last_offset_delta() as i64;
+                            if last_offset >= fetch_offset {
+                                return false;
+                            }
+                        }
+                        true
+                    })
+                    .next();
                 partitions.push(PartitionData {
                     partition_index: idx,
                     high_watermark: committed_index,
                     last_stable_offset: committed_index,
                     log_start_offset: 0,
-                    records: Records::new(ByteBuffer::new(records.to_vec())),
+                    records: records.cloned().unwrap_or_default(),
                     ..Default::default()
                 });
             }
