@@ -14,8 +14,6 @@
 
 use std::{io, io::Cursor};
 
-use bytes::{BufMut, BytesMut};
-
 use crate::{
     apikey::ApiMessageType, codec::*, request_header::RequestHeader,
     response_header::ResponseHeader,
@@ -64,7 +62,7 @@ pub enum Request {
 }
 
 impl Request {
-    pub fn decode(buf: &mut BytesMut) -> io::Result<(RequestHeader, Request)> {
+    pub fn decode(buf: &mut bytes::BytesMut) -> io::Result<(RequestHeader, Request)> {
         let header_version = {
             let mut cursor = Cursor::new(&buf[..]);
             let api_key = Int16.decode(&mut cursor)?;
@@ -135,7 +133,7 @@ pub enum Response {
 }
 
 impl Response {
-    pub fn encode_alloc(&self, header: RequestHeader) -> io::Result<bytes::Bytes> {
+    pub fn encode<B: bytes::BufMut>(&self, header: RequestHeader, bs: &mut B) -> io::Result<()> {
         let api_type = ApiMessageType::try_from(header.request_api_key)?;
         let api_version = header.request_api_version;
         let correlation_id = header.correlation_id;
@@ -161,9 +159,8 @@ impl Response {
             Response::SyncGroupResponse(resp) => resp.write(&mut buf, api_version)?,
         }
 
-        let mut bs = BytesMut::new();
-        Int32.encode(&mut bs, buf.len() as i32)?;
+        Int32.encode(bs, buf.len() as i32)?;
         bs.put_slice(buf.as_slice());
-        Ok(bs.freeze())
+        Ok(())
     }
 }

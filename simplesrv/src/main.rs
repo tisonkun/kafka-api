@@ -97,7 +97,8 @@ fn dispatch(mut socket: TcpStream, broker: Arc<Mutex<Broker>>) -> io::Result<()>
             let mut broker = broker.lock().unwrap();
             broker.reply(client_info, header.clone(), request)
         };
-        let bs = response.encode_alloc(header)?;
+        let mut bs = bytes::BytesMut::new();
+        response.encode(header, &mut bs)?;
         socket.write_all(bs.as_ref())?;
     }
 }
