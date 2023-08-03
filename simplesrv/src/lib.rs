@@ -388,7 +388,7 @@ impl Broker {
                         .topic_partition_store
                         .get_mut(&(topic_meta.topic_id, idx))
                         .unwrap();
-                    for mut batch in records.into_batches().expect("malformed records") {
+                    for mut batch in records.batches().expect("malformed records") {
                         trace!("storing batch {batch:?} with last_offset {last_offset}");
                         *last_offset += batch.records_count() as i64;
                         batch.set_last_offset(*last_offset - 1);

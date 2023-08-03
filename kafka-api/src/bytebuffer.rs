@@ -13,7 +13,12 @@
 // limitations under the License.
 
 use core::slice;
-use std::{mem::ManuallyDrop, ops::RangeBounds, ptr::drop_in_place, sync::Arc};
+use std::{
+    mem::ManuallyDrop,
+    ops::{Deref, RangeBounds},
+    ptr::drop_in_place,
+    sync::Arc,
+};
 
 use bytes::Buf;
 
@@ -24,7 +29,31 @@ pub struct ByteBuffer {
     shared: Shared,
 }
 
+impl Default for ByteBuffer {
+    fn default() -> Self {
+        ByteBuffer::new(vec![])
+    }
+}
+
+impl AsRef<[u8]> for ByteBuffer {
+    fn as_ref(&self) -> &[u8] {
+        self.chunk()
+    }
+}
+
+impl Deref for ByteBuffer {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.chunk()
+    }
+}
+
 impl ByteBuffer {
+    pub fn len(&self) -> usize {
+        self.end - self.start
+    }
+
     #[must_use = "consider ByteBuffer::advance if you don't need the other half"]
     pub fn split_to(&mut self, at: usize) -> ByteBuffer {
         assert!(
@@ -73,6 +102,26 @@ impl ByteBuffer {
 
     // SAFETY - modifications are nonoverlapping
     pub fn slice(&self, range: impl RangeBounds<usize>) -> ByteBuffer {
+        let (begin, end) = self.check_range(range);
+        ByteBuffer {
+            start: self.start + begin,
+            end: self.start + end,
+            shared: self.shared.clone(),
+        }
+    }
+
+    // SAFETY - modifications are nonoverlapping
+    pub(crate) fn chunk_mut(&self) -> &mut [u8] {
+        unsafe { slice::from_raw_parts_mut(self.ptr(), self.len()) }
+    }
+
+    // SAFETY - modifications are nonoverlapping
+    pub(crate) fn chunk_mut_in(&self, range: impl RangeBounds<usize>) -> &mut [u8] {
+        let (begin, end) = self.check_range(range);
+        &mut self.chunk_mut()[begin..end]
+    }
+
+    fn check_range(&self, range: impl RangeBounds<usize>) -> (usize, usize) {
         use core::ops::Bound;
 
         let len = self.len();
@@ -102,24 +151,11 @@ impl ByteBuffer {
             len,
         );
 
-        ByteBuffer {
-            start: self.start + begin,
-            end: self.start + end,
-            shared: self.shared.clone(),
-        }
-    }
-
-    // SAFETY - modifications are nonoverlapping
-    pub(crate) fn chunk_mut(&self) -> &mut [u8] {
-        unsafe { slice::from_raw_parts_mut(self.ptr(), self.len()) }
+        (begin, end)
     }
 
     unsafe fn ptr(&self) -> *mut u8 {
         self.shared.ptr.offset(self.start as isize)
-    }
-
-    fn len(&self) -> usize {
-        self.end - self.start
     }
 }
 
@@ -151,7 +187,6 @@ struct DeallocateGuard {
 
 impl Drop for DeallocateGuard {
     fn drop(&mut self) {
-        println!("dropped");
         unsafe { drop_in_place(self.ptr) }
     }
 }

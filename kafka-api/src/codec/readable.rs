@@ -16,7 +16,7 @@ use std::{io, mem::size_of};
 
 use bytes::Buf;
 
-use crate::{err_codec_message, record::Records, RawTaggedField};
+use crate::{bytebuffer::ByteBuffer, err_codec_message, record::Records, RawTaggedField};
 
 fn varint_zigzag(i: i32) -> i32 {
     (((i as u32) >> 1) as i32) ^ -(i & 1)
@@ -52,7 +52,7 @@ pub trait Readable {
 
     fn read_records(&mut self, len: usize) -> Records {
         let bs = self.read_bytes(len);
-        Records::new(bytes::BytesMut::from(&bs[..]))
+        Records::new(ByteBuffer::new(bs.to_vec()))
     }
 
     fn read_uuid(&mut self) -> uuid::Uuid {
@@ -174,6 +174,10 @@ impl Readable for bytes::BytesMut {
     delegate_forward_buf!();
 
     fn read_records(&mut self, len: usize) -> Records {
-        Records::new(self.split_to(len))
+        Records::new(ByteBuffer::new(self.split_to(len).to_vec()))
     }
+}
+
+impl Readable for ByteBuffer {
+    delegate_forward_buf!();
 }
