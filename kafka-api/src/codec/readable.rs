@@ -43,7 +43,7 @@ pub trait Readable {
 
     fn read_string(&mut self, len: usize) -> String {
         let bs = self.read_bytes(len);
-        unsafe { String::from_utf8_unchecked(bs.to_vec()) }
+        String::from_utf8_lossy(bs.as_bytes()).into_owned()
     }
 
     fn read_unknown_tagged_field(&mut self, tag: i32, size: usize) -> RawTaggedField {

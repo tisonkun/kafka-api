@@ -27,14 +27,6 @@ pub mod record;
 mod schemata;
 pub mod sendable;
 
-#[allow(unused)]
-fn err_io_other<E>(error: E) -> io::Error
-where
-    E: Into<Box<dyn std::error::Error + Send + Sync>>,
-{
-    io::Error::new(io::ErrorKind::Other, error.into())
-}
-
 fn err_codec_message(message: String) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
