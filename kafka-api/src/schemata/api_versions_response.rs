@@ -211,8 +211,8 @@ impl Serializable for FinalizedFeatureKey {
     fn calculate_size(&self, _version: i16) -> usize {
         let mut res = 0;
         res += NullableString(true).calculate_size(self.name.as_ref());
-        res += Int16.calculate_size(self.max_version_level);
-        res += Int16.calculate_size(self.min_version_level);
+        res += Int16::SIZE; // self.max_version_level
+        res += Int16::SIZE; // self.min_version_level
         res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
         res
     }

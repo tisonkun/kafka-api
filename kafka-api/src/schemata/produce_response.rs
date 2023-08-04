@@ -60,7 +60,7 @@ impl Serializable for ProduceResponse {
         res +=
             NullableArray(Struct(version), version >= 9).calculate_size(self.responses.as_slice());
         if version > 1 {
-            res += Int32.calculate_size(self.throttle_time_ms);
+            res += Int32::SIZE; // self.throttle_time_ms
         }
         if version >= 9 {
             res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
@@ -151,14 +151,14 @@ impl Serializable for PartitionProduceResponse {
 
     fn calculate_size(&self, version: i16) -> usize {
         let mut res = 0;
-        res += Int32.calculate_size(self.index);
-        res += Int16.calculate_size(self.error_code);
-        res += Int64.calculate_size(self.base_offset);
+        res += Int32::SIZE; // self.index
+        res += Int16::SIZE; // self.error_code
+        res += Int64::SIZE; // self.base_offset
         if version >= 2 {
-            res += Int64.calculate_size(self.log_append_time_ms);
+            res += Int64::SIZE; // self.log_append_time_ms
         }
         if version >= 5 {
-            res += Int64.calculate_size(self.log_start_offset);
+            res += Int64::SIZE; // self.log_start_offset
         }
         if version >= 8 {
             res += NullableArray(Struct(version), version >= 9)

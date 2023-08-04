@@ -59,7 +59,7 @@ impl Serializable for CreateTopicsResponse {
     fn calculate_size(&self, version: i16) -> usize {
         let mut res = 0;
         if version >= 2 {
-            res += Int32.calculate_size(self.throttle_time_ms);
+            res += Int32::SIZE; // self.throttle_time_ms
         }
         res += NullableArray(Struct(version), version >= 5).calculate_size(self.topics.as_slice());
         if version >= 5 {

@@ -79,11 +79,11 @@ impl Serializable for FetchResponse {
     fn calculate_size(&self, version: i16) -> usize {
         let mut res = 0;
         if version >= 1 {
-            res += Int32.calculate_size(self.throttle_time_ms);
+            res += Int32::SIZE; // self.throttle_time_ms
         }
         if version >= 7 {
-            res += Int16.calculate_size(self.error_code);
-            res += Int32.calculate_size(self.session_id);
+            res += Int16::SIZE; // self.error_code
+            res += Int32::SIZE; // self.session_id
         }
         res +=
             NullableArray(Struct(version), version >= 12).calculate_size(self.responses.as_slice());
@@ -127,7 +127,7 @@ impl Serializable for FetchableTopicResponse {
             res += NullableString(version >= 12).calculate_size(self.topic.as_str());
         }
         if version >= 13 {
-            res += Uuid.calculate_size(self.topic_id);
+            res += Uuid::SIZE; // self.topic_id
         }
         res += NullableArray(Struct(version), version >= 12)
             .calculate_size(self.partitions.as_slice());
@@ -300,8 +300,8 @@ impl Serializable for EpochEndOffset {
 
     fn calculate_size(&self, _version: i16) -> usize {
         let mut res = 0;
-        res += Int32.calculate_size(self.epoch);
-        res += Int64.calculate_size(self.end_offset);
+        res += Int32::SIZE; // self.epoch
+        res += Int64::SIZE; // self.end_offset
         res += RawTaggedFieldList.calculate_size(self.unknown_tagged_fields.as_slice());
         res
     }
@@ -340,8 +340,8 @@ impl Serializable for LeaderIdAndEpoch {
 
     fn calculate_size(&self, _version: i16) -> usize {
         let mut res = 0;
-        res += Int32.calculate_size(self.leader_id);
-        res += Int32.calculate_size(self.leader_epoch);
+        res += Int32::SIZE; // self.leader_id
+        res += Int32::SIZE; // self.leader_epoch
         res += RawTaggedFieldList.calculate_size(self.unknown_tagged_fields.as_slice());
         res
     }
@@ -378,8 +378,8 @@ impl Serializable for SnapshotId {
 
     fn calculate_size(&self, _version: i16) -> usize {
         let mut res = 0;
-        res += Int64.calculate_size(self.end_offset);
-        res += Int32.calculate_size(self.epoch);
+        res += Int64::SIZE; // self.end_offset
+        res += Int32::SIZE; // self.epoch
         res += RawTaggedFieldList.calculate_size(self.unknown_tagged_fields.as_slice());
         res
     }
@@ -413,8 +413,8 @@ impl Serializable for AbortedTransaction {
 
     fn calculate_size(&self, version: i16) -> usize {
         let mut res = 0;
-        res += Int64.calculate_size(self.producer_id);
-        res += Int64.calculate_size(self.first_offset);
+        res += Int64::SIZE; // self.producer_id
+        res += Int64::SIZE; // self.first_offset
         if version >= 12 {
             res += RawTaggedFieldList.calculate_size(self.unknown_tagged_fields.as_slice());
         }

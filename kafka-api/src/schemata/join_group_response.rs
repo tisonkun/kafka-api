@@ -88,17 +88,17 @@ impl Serializable for JoinGroupResponse {
     fn calculate_size(&self, version: i16) -> usize {
         let mut res = 0;
         if version >= 2 {
-            res += Int32.calculate_size(self.throttle_time_ms);
+            res += Int32::SIZE; // self.throttle_time_ms
         }
-        res += Int16.calculate_size(self.error_code);
-        res += Int32.calculate_size(self.generation_id);
+        res += Int16::SIZE; // self.error_code
+        res += Int32::SIZE; // self.generation_id
         if version >= 7 {
             res += NullableString(true).calculate_size(self.protocol_type.as_deref());
         }
         res += NullableString(version >= 6).calculate_size(self.protocol_name.as_deref());
         res += NullableString(version >= 6).calculate_size(self.leader.as_str());
         if version >= 9 {
-            res += Bool.calculate_size(self.skip_assignment);
+            res += Bool::SIZE; // self.skip_assignment
         }
         res += NullableString(version >= 6).calculate_size(self.member_id.as_str());
         res += NullableArray(Struct(version), version >= 6).calculate_size(self.members.as_slice());
