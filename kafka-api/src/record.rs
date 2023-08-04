@@ -67,16 +67,17 @@ pub struct MutableRecords {
 impl Clone for MutableRecords {
     /// ATTENTION - Cloning Records is a heavy operation.
     ///
-    /// Records is a public struct and it has a [MutableRecords::mut_batches] method that modifies
-    /// the underlying [ByteBuffer]. If we only do a shallow clone, then two Records that
-    /// doesn't have any ownership overlapping can modify the same underlying slice.
+    /// MutableRecords is a public struct and it has a [MutableRecords::mut_batches] method that
+    /// modifies the underlying [ByteBuffer]. If we only do a shallow clone, then two MutableRecords
+    /// that doesn't have any ownership overlapping can modify the same underlying bytes.
     ///
-    /// Generally, Records users iterate over batches with [MutableRecords::batches] or
-    /// [MutableRecords::mut_batches], and pass ownership instead of clone Records.
+    /// Generally, MutableRecords users iterate over batches with [MutableRecords::batches] or
+    /// [MutableRecords::mut_batches], and pass ownership instead of clone. This clone behavior is
+    /// similar to clone a [Vec].
     ///
-    /// This clone behavior is similar to clone a [Vec].
+    /// To produce a read-only view without copy, use [MutableRecords::freeze] instead.
     fn clone(&self) -> Self {
-        warn!("Cloning mutable records is a heavy operation and not encouraged.");
+        warn!("Cloning mutable records will copy bytes and is not encouraged; try MutableRecords::freeze.");
         MutableRecords {
             buf: ByteBuffer::new(self.buf.to_vec()),
             batches: OnceCell::new(),
