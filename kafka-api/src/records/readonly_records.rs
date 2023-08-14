@@ -29,9 +29,9 @@ impl ReadOnlyRecords {
         }
     }
 
-    pub fn batches(&self) -> Iter<'_, RecordBatch> {
+    pub fn batches(&self) -> &[RecordBatch] {
         match self {
-            ReadOnlyRecords::None => [].iter(),
+            ReadOnlyRecords::None => &[],
             ReadOnlyRecords::ByteBuffer(r) => r.batches(),
         }
     }
@@ -54,7 +54,7 @@ impl Clone for ByteBufferRecords {
 
 impl Debug for ByteBufferRecords {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(&load_batches(&self.buf), f)
+        Debug::fmt(self.batches(), f)
     }
 }
 
@@ -68,7 +68,7 @@ impl ByteBufferRecords {
         self.buf.as_bytes()
     }
 
-    pub fn batches(&self) -> Iter<'_, RecordBatch> {
-        self.batches.get_or_init(|| load_batches(&self.buf)).iter()
+    pub fn batches(&self) -> &[RecordBatch] {
+        self.batches.get_or_init(|| load_batches(&self.buf))
     }
 }

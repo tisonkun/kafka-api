@@ -194,7 +194,7 @@ mod tests {
     #[test]
     fn test_codec_records() -> io::Result<()> {
         let records = MutableRecords::new(ByteBuffer::new(RECORD.to_vec()));
-        let record_batches = records.batches().collect::<Vec<_>>();
+        let record_batches = records.batches();
         assert_eq!(record_batches.len(), 1);
         let record_batch = &record_batches[0];
         assert_eq!(record_batch.records_count(), 1);

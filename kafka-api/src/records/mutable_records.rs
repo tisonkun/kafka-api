@@ -15,7 +15,6 @@
 use std::{
     cell::OnceCell,
     fmt::{Debug, Formatter},
-    slice::{Iter, IterMut},
 };
 
 use tracing::warn;
@@ -51,7 +50,7 @@ impl Clone for MutableRecords {
 
 impl Debug for MutableRecords {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(self.batches.get_or_init(|| load_batches(&self.buf)), f)
+        Debug::fmt(self.batches(), f)
     }
 }
 
@@ -69,13 +68,13 @@ impl MutableRecords {
         self.buf.as_bytes()
     }
 
-    pub fn mut_batches(&mut self) -> IterMut<'_, RecordBatch> {
+    pub fn mut_batches(&mut self) -> &mut [RecordBatch] {
         self.batches.get_or_init(|| load_batches(&self.buf));
         // SAFETY - init above
-        unsafe { self.batches.get_mut().unwrap_unchecked() }.iter_mut()
+        unsafe { self.batches.get_mut().unwrap_unchecked() }
     }
 
-    pub fn batches(&self) -> Iter<'_, RecordBatch> {
-        self.batches.get_or_init(|| load_batches(&self.buf)).iter()
+    pub fn batches(&self) -> &[RecordBatch] {
+        self.batches.get_or_init(|| load_batches(&self.buf))
     }
 }

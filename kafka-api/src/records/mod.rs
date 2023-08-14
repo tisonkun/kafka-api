@@ -15,7 +15,6 @@
 use std::{
     cell::OnceCell,
     fmt::{Debug, Formatter},
-    slice::Iter,
 };
 
 use bytes::Buf;
