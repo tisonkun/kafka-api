@@ -118,24 +118,27 @@ impl MutableRecords {
 
 #[derive(Debug, Clone)]
 pub enum ReadOnlyRecords {
+    None,
     ByteBuffer(ByteBufferRecords),
 }
 
 impl Default for ReadOnlyRecords {
     fn default() -> Self {
-        ReadOnlyRecords::ByteBuffer(ByteBufferRecords::default())
+        ReadOnlyRecords::None
     }
 }
 
 impl ReadOnlyRecords {
     pub fn size(&self) -> usize {
         match self {
+            ReadOnlyRecords::None => 0,
             ReadOnlyRecords::ByteBuffer(r) => r.buf.len(),
         }
     }
 
     pub fn batches(&self) -> Iter<'_, RecordBatch> {
         match self {
+            ReadOnlyRecords::None => [].iter(),
             ReadOnlyRecords::ByteBuffer(r) => r.batches(),
         }
     }

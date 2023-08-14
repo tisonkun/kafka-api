@@ -137,6 +137,7 @@ impl Sendable {
             Sendable::Bytes(bs) => writer.write_all(bs.as_ref()),
             Sendable::ByteBuffer(buf) => writer.write_all(buf.as_bytes()),
             Sendable::Records(r) => match r {
+                ReadOnlyRecords::None => writer.write_all(&[]),
                 ReadOnlyRecords::ByteBuffer(r) => writer.write_all(r.as_bytes()),
             },
         }
