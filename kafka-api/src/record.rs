@@ -26,6 +26,19 @@ use crate::{
     codec::{Decoder, RecordList},
 };
 
+pub const NO_SEQUENCE: i32 = -1;
+
+// The current attributes are given below:
+// ---------------------------------------------------------------------------------------------------------------------------
+// | Unused (7-15) | Delete Horizon Flag (6) | Control (5) | Transactional (4) | Timestamp Type (3) | Compression Type (0-2) |
+// ---------------------------------------------------------------------------------------------------------------------------
+pub const COMPRESSION_CODEC_MASK: u8 = 0x07;
+pub const TIMESTAMP_TYPE_MASK: u8 = 0x08;
+pub const TRANSACTIONAL_FLAG_MASK: u8 = 0x10;
+pub const CONTROL_FLAG_MASK: u8 = 0x20;
+pub const DELETE_HORIZON_FLAG_MASK: u8 = 0x40;
+
+// offset table
 pub const BASE_OFFSET_OFFSET: usize = 0;
 pub const BASE_OFFSET_LENGTH: usize = 8;
 pub const LENGTH_OFFSET: usize = BASE_OFFSET_OFFSET + BASE_OFFSET_LENGTH;
@@ -225,12 +238,35 @@ pub struct RecordBatch {
 impl Debug for RecordBatch {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut de = f.debug_struct("RecordBatch");
-        de.field("base_offset", &self.base_offset());
-        de.field("base_sequence", &self.base_sequence());
-        de.field("last_offset_delta", &self.last_offset_delta());
+        de.field("magic", &self.magic());
+        de.field("offset", &(self.base_offset()..=self.last_offset()));
+        de.field("sequence", &(self.base_sequence()..=self.last_sequence()));
+        de.field("is_transactional", &self.is_transactional());
+        de.field("is_control_batch", &self.is_control_batch());
+        de.field("compression_type", &self.compression_type());
+        de.field("timestamp_type", &self.timestamp_type());
+        de.field("crc", &self.checksum());
         de.field("records_count", &self.records_count());
         de.field("records", &self.records());
         de.finish()
+    }
+}
+
+/// Similar to [i32::wrapping_add], but wrap to `0` instead of [i32::MIN].
+pub fn increment_sequence(sequence: i32, increment: i32) -> i32 {
+    if sequence > i32::MAX - increment {
+        increment - (i32::MAX - sequence) - 1
+    } else {
+        sequence + increment
+    }
+}
+
+/// Similar to [i32::wrapping_add], but wrap at `0` instead of [i32::MIN].
+pub fn decrement_sequence(sequence: i32, decrement: i32) -> i32 {
+    if sequence < decrement {
+        i32::MAX - (decrement - sequence) + 1
+    } else {
+        sequence - decrement
     }
 }
 
@@ -242,16 +278,41 @@ impl RecordBatch {
             .put_i64(base_offset);
     }
 
+    pub fn set_partition_leader_epoch(&mut self, epoch: i32) {
+        self.buf
+            .mut_slice_in(PARTITION_LEADER_EPOCH_OFFSET..)
+            .put_i32(epoch);
+    }
+
+    pub fn magic(&self) -> i8 {
+        (&self.buf[MAGIC_OFFSET..]).get_i8()
+    }
+
     pub fn base_offset(&self) -> i64 {
         (&self.buf[BASE_OFFSET_OFFSET..]).get_i64()
+    }
+
+    pub fn last_offset(&self) -> i64 {
+        self.base_offset() + self.last_offset_delta() as i64
     }
 
     pub fn base_sequence(&self) -> i32 {
         (&self.buf[BASE_SEQUENCE_OFFSET..]).get_i32()
     }
 
+    pub fn last_sequence(&self) -> i32 {
+        match self.base_sequence() {
+            NO_SEQUENCE => NO_SEQUENCE,
+            seq => increment_sequence(seq, self.last_offset_delta()),
+        }
+    }
+
     pub fn last_offset_delta(&self) -> i32 {
         (&self.buf[LAST_OFFSET_DELTA_OFFSET..]).get_i32()
+    }
+
+    pub fn max_timestamp(&self) -> i64 {
+        (&self.buf[MAX_TIMESTAMP_OFFSET..]).get_i64()
     }
 
     pub fn records_count(&self) -> i32 {
@@ -261,6 +322,47 @@ impl RecordBatch {
     pub fn records(&self) -> Vec<Record> {
         let mut records = self.buf.slice(RECORDS_COUNT_OFFSET..);
         RecordList.decode(&mut records).expect("malformed records")
+    }
+
+    pub fn checksum(&self) -> u32 {
+        (&self.buf[CRC_OFFSET..]).get_u32()
+    }
+
+    pub fn is_transactional(&self) -> bool {
+        self.attributes() & TRANSACTIONAL_FLAG_MASK > 0
+    }
+
+    pub fn is_control_batch(&self) -> bool {
+        self.attributes() & CONTROL_FLAG_MASK > 0
+    }
+
+    pub fn timestamp_type(&self) -> TimestampType {
+        if self.attributes() & TIMESTAMP_TYPE_MASK != 0 {
+            TimestampType::LogAppendTime
+        } else {
+            TimestampType::CreateTime
+        }
+    }
+
+    pub fn compression_type(&self) -> CompressionType {
+        (self.attributes() & COMPRESSION_CODEC_MASK).into()
+    }
+
+    pub fn delete_horizon_ms(&self) -> Option<i64> {
+        if self.has_delete_horizon_ms() {
+            Some((&self.buf[BASE_TIMESTAMP_OFFSET..]).get_i64())
+        } else {
+            None
+        }
+    }
+
+    fn has_delete_horizon_ms(&self) -> bool {
+        self.attributes() & DELETE_HORIZON_FLAG_MASK > 0
+    }
+
+    // note we're not using the second byte of attributes
+    fn attributes(&self) -> u8 {
+        (&self.buf[ATTRIBUTES_OFFSET..]).get_u16() as u8
     }
 }
 
@@ -284,6 +386,35 @@ pub struct Header {
     pub key: Option<ByteBuffer>,
     pub value_len: i32, // varint
     pub value: Option<ByteBuffer>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum TimestampType {
+    CreateTime,
+    LogAppendTime,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub enum CompressionType {
+    #[default]
+    None,
+    Gzip,
+    Snappy,
+    Lz4,
+    Zstd,
+}
+
+impl From<u8> for CompressionType {
+    fn from(ty: u8) -> Self {
+        match ty {
+            0 => CompressionType::None,
+            1 => CompressionType::Gzip,
+            2 => CompressionType::Snappy,
+            3 => CompressionType::Lz4,
+            4 => CompressionType::Zstd,
+            _ => unreachable!("Unknown compression type id: {}", ty),
+        }
+    }
 }
 
 #[cfg(test)]
