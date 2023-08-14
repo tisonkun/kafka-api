@@ -18,7 +18,7 @@ pub use crate::codec::{readable::Readable, writable::Writable};
 use crate::{
     bytebuffer::ByteBuffer,
     err_codec_message,
-    record::{Header, MutableRecords, ReadOnlyRecords, Record},
+    records::{Header, MutableRecords, ReadOnlyRecords, Record},
 };
 
 pub mod readable;

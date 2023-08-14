@@ -14,7 +14,7 @@
 
 use std::io;
 
-use crate::{bytebuffer::ByteBuffer, record::ReadOnlyRecords};
+use crate::{bytebuffer::ByteBuffer, records::ReadOnlyRecords};
 
 pub trait Writable {
     fn write_i8(&mut self, n: i8) -> io::Result<()>;

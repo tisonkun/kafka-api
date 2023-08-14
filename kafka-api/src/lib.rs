@@ -23,7 +23,7 @@ pub mod apikey;
 pub mod bytebuffer;
 pub(crate) mod codec;
 pub mod error;
-pub mod record;
+pub mod records;
 mod schemata;
 pub mod sendable;
 

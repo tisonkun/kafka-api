@@ -16,7 +16,7 @@ use std::{io, mem::size_of};
 
 use bytes::Buf;
 
-use crate::{bytebuffer::ByteBuffer, err_codec_message, record::MutableRecords, RawTaggedField};
+use crate::{bytebuffer::ByteBuffer, err_codec_message, records::MutableRecords, RawTaggedField};
 
 fn varint_zigzag(i: i32) -> i32 {
     (((i as u32) >> 1) as i32) ^ -(i & 1)

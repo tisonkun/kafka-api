@@ -16,7 +16,7 @@ use std::io;
 
 use bytes::BufMut;
 
-use crate::{bytebuffer::ByteBuffer, codec::writable::Writable, record::ReadOnlyRecords};
+use crate::{bytebuffer::ByteBuffer, codec::writable::Writable, records::ReadOnlyRecords};
 
 pub struct SendBuilder {
     sends: Vec<Sendable>,

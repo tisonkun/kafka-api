@@ -14,7 +14,7 @@
 
 use std::io;
 
-use crate::{codec::*, err_encode_message_unsupported, record::ReadOnlyRecords};
+use crate::{codec::*, err_encode_message_unsupported, records::ReadOnlyRecords};
 
 // Version 1 adds throttle time.
 //

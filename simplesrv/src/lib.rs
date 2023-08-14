@@ -45,7 +45,7 @@ use kafka_api::{
     },
     produce_request::ProduceRequest,
     produce_response::{PartitionProduceResponse, ProduceResponse, TopicProduceResponse},
-    record::ReadOnlyRecords,
+    records::ReadOnlyRecords,
     request_header::RequestHeader,
     sync_group_request::SyncGroupRequest,
     sync_group_response::SyncGroupResponse,

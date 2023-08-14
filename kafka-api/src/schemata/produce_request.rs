@@ -15,7 +15,7 @@
 use std::io;
 
 use crate::{
-    codec::*, err_decode_message_null, err_decode_message_unsupported, record::MutableRecords,
+    codec::*, err_decode_message_null, err_decode_message_unsupported, records::MutableRecords,
 };
 
 // Version 1 and 2 are the same as version 0.
