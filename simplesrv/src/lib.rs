@@ -580,8 +580,7 @@ impl Broker {
                 let fetch_offset = part.fetch_offset;
                 let records = partition.1.iter().find(|r| {
                     for batch in r.batches() {
-                        let last_offset = batch.base_offset() + batch.last_offset_delta() as i64;
-                        if last_offset >= fetch_offset {
+                        if batch.last_offset() >= fetch_offset {
                             return true;
                         }
                     }

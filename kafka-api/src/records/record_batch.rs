@@ -99,7 +99,7 @@ impl RecordBatch {
         }
     }
 
-    pub fn last_offset_delta(&self) -> i32 {
+    fn last_offset_delta(&self) -> i32 {
         (&self.buf[LAST_OFFSET_DELTA_OFFSET..]).get_i32()
     }
 
