@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::io;
+
 use crate::records::*;
 
 #[derive(Debug, Default, Clone)]
@@ -33,6 +35,13 @@ impl ReadOnlyRecords {
         match self {
             ReadOnlyRecords::None => &[],
             ReadOnlyRecords::ByteBuffer(r) => r.batches(),
+        }
+    }
+
+    pub fn write_to<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+        match self {
+            ReadOnlyRecords::None => writer.write_all(&[]),
+            ReadOnlyRecords::ByteBuffer(r) => writer.write_all(r.buf.as_bytes()),
         }
     }
 }
@@ -64,11 +73,7 @@ impl ByteBufferRecords {
         ByteBufferRecords { buf, batches }
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
-        self.buf.as_bytes()
-    }
-
-    pub fn batches(&self) -> &[RecordBatch] {
+    fn batches(&self) -> &[RecordBatch] {
         self.batches.get_or_init(|| load_batches(&self.buf))
     }
 }
