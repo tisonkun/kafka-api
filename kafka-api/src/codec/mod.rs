@@ -409,7 +409,7 @@ impl Encoder<Option<&ReadOnlyRecords>> for NullableRecords {
                 if self.0 {
                     VarInt.encode(buf, 0)?
                 } else {
-                    Int32.encode(buf, -1)?
+                    Int16.encode(buf, -1)?
                 }
             }
             Some(r) => {
@@ -516,7 +516,7 @@ fn write_slice<B: Writable>(buf: &mut B, slice: Option<&[u8]>, flexible: bool) -
             if flexible {
                 VarInt.encode(buf, 0)?
             } else {
-                Int32.encode(buf, -1)?
+                Int16.encode(buf, -1)?
             }
         }
         Some(bs) => {
