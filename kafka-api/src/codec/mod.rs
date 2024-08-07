@@ -482,7 +482,6 @@ impl Decoder<Option<ByteBuffer>> for NullableBytes32 {
     }
 }
 
-
 impl Encoder<Option<&ByteBuffer>> for NullableBytes {
     fn encode<B: Writable>(&self, buf: &mut B, value: Option<&ByteBuffer>) -> io::Result<()> {
         write_slice(buf, value.map(|bs| bs.as_bytes()), self.0)
@@ -555,14 +554,13 @@ fn slice_size32(slice: Option<&[u8]>, flexible: bool) -> usize {
         Some(bs) => {
             bs.len()
                 + if flexible {
-                VarInt.calculate_size(bs.len() as i32 + 1)
-            } else {
-                Int32::SIZE
-            }
+                    VarInt.calculate_size(bs.len() as i32 + 1)
+                } else {
+                    Int32::SIZE
+                }
         }
     }
 }
-
 
 fn write_slice32<B: Writable>(buf: &mut B, slice: Option<&[u8]>, flexible: bool) -> io::Result<()> {
     match slice {

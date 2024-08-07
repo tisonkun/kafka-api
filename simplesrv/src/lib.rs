@@ -571,9 +571,11 @@ impl Broker {
     fn receive_fetch(&mut self, request: FetchRequest) -> FetchResponse {
         let mut responses = vec![];
         for topic in request.topics.iter() {
-            let topic_id = self.topics.get(&topic.topic).map(|t| t.topic_id).unwrap_or(
-                topic.topic_id
-            );
+            let topic_id = self
+                .topics
+                .get(&topic.topic)
+                .map(|t| t.topic_id)
+                .unwrap_or(topic.topic_id);
             let mut partitions = vec![];
             for part in topic.partitions.iter() {
                 let idx = part.partition;
