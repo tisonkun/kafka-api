@@ -476,7 +476,7 @@ impl Decoder<Option<ByteBuffer>> for NullableBytes32 {
         let len = if self.0 {
             VarInt.decode(buf)? - 1
         } else {
-            Int32.decode(buf)? as i32
+            Int32.decode(buf)?
         };
         read_nullable_bytes(buf, len, "bytes")
     }
