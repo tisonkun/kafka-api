@@ -55,7 +55,7 @@ impl Serializable for SyncGroupResponse {
             NullableString(true).encode(buf, self.protocol_type.as_deref())?;
             NullableString(true).encode(buf, self.protocol_name.as_deref())?;
         }
-        NullableBytes(version >= 4).encode(buf, &self.assignment)?;
+        NullableBytes32(version >= 4).encode(buf, &self.assignment)?;
         if version >= 4 {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
@@ -72,7 +72,7 @@ impl Serializable for SyncGroupResponse {
             res += NullableString(true).calculate_size(self.protocol_type.as_deref());
             res += NullableString(true).calculate_size(self.protocol_name.as_deref());
         }
-        res += NullableBytes(version >= 4).calculate_size(&self.assignment);
+        res += NullableBytes32(version >= 4).calculate_size(&self.assignment);
         if version >= 4 {
             res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
         }
