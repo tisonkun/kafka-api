@@ -458,6 +458,7 @@ impl Encoder<&ReadOnlyRecords> for NullableRecords {
 
 #[derive(Debug, Copy, Clone)]
 pub(super) struct NullableBytes(pub bool /* flexible */);
+pub(super) struct NullableBytes32(pub bool /* flexible */);
 
 impl Decoder<Option<ByteBuffer>> for NullableBytes {
     fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Option<ByteBuffer>> {
@@ -470,6 +471,18 @@ impl Decoder<Option<ByteBuffer>> for NullableBytes {
     }
 }
 
+impl Decoder<Option<ByteBuffer>> for NullableBytes32 {
+    fn decode<B: Readable>(&self, buf: &mut B) -> io::Result<Option<ByteBuffer>> {
+        let len = if self.0 {
+            VarInt.decode(buf)? - 1
+        } else {
+            Int32.decode(buf)? as i32
+        };
+        read_nullable_bytes(buf, len, "bytes")
+    }
+}
+
+
 impl Encoder<Option<&ByteBuffer>> for NullableBytes {
     fn encode<B: Writable>(&self, buf: &mut B, value: Option<&ByteBuffer>) -> io::Result<()> {
         write_slice(buf, value.map(|bs| bs.as_bytes()), self.0)
@@ -477,6 +490,26 @@ impl Encoder<Option<&ByteBuffer>> for NullableBytes {
 
     fn calculate_size(&self, value: Option<&ByteBuffer>) -> usize {
         slice_size(value.map(|bs| bs.as_bytes()), self.0)
+    }
+}
+
+impl Encoder<Option<&ByteBuffer>> for NullableBytes32 {
+    fn encode<B: Writable>(&self, buf: &mut B, value: Option<&ByteBuffer>) -> io::Result<()> {
+        write_slice32(buf, value.map(|bs| bs.as_bytes()), self.0)
+    }
+
+    fn calculate_size(&self, value: Option<&ByteBuffer>) -> usize {
+        slice_size32(value.map(|bs| bs.as_bytes()), self.0)
+    }
+}
+
+impl Encoder<&ByteBuffer> for NullableBytes32 {
+    fn encode<B: Writable>(&self, buf: &mut B, value: &ByteBuffer) -> io::Result<()> {
+        self.encode(buf, Some(value))
+    }
+
+    fn calculate_size(&self, value: &ByteBuffer) -> usize {
+        self.calculate_size(Some(value))
     }
 }
 
@@ -508,6 +541,49 @@ fn slice_size(slice: Option<&[u8]>, flexible: bool) -> usize {
                 }
         }
     }
+}
+
+fn slice_size32(slice: Option<&[u8]>, flexible: bool) -> usize {
+    match slice {
+        None => {
+            if flexible {
+                1
+            } else {
+                Int32::SIZE
+            }
+        }
+        Some(bs) => {
+            bs.len()
+                + if flexible {
+                VarInt.calculate_size(bs.len() as i32 + 1)
+            } else {
+                Int32::SIZE
+            }
+        }
+    }
+}
+
+
+fn write_slice32<B: Writable>(buf: &mut B, slice: Option<&[u8]>, flexible: bool) -> io::Result<()> {
+    match slice {
+        None => {
+            if flexible {
+                VarInt.encode(buf, 0)?
+            } else {
+                Int32.encode(buf, -1)?
+            }
+        }
+        Some(bs) => {
+            let len = bs.len() as i32;
+            if flexible {
+                VarInt.encode(buf, len + 1)?;
+            } else {
+                Int32.encode(buf, len)?;
+            }
+            buf.write_slice(bs)?;
+        }
+    }
+    Ok(())
 }
 
 fn write_slice<B: Writable>(buf: &mut B, slice: Option<&[u8]>, flexible: bool) -> io::Result<()> {

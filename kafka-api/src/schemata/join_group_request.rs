@@ -113,7 +113,7 @@ impl Deserializable for JoinGroupRequestProtocol {
             name: NullableString(version >= 6)
                 .decode(buf)?
                 .ok_or_else(|| err_decode_message_null("name"))?,
-            metadata: NullableBytes(version >= 6)
+            metadata: NullableBytes32(version >= 6)
                 .decode(buf)?
                 .ok_or_else(|| err_decode_message_null("metadata"))?,
             ..Default::default()

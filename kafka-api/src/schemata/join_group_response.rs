@@ -127,7 +127,7 @@ impl Serializable for JoinGroupResponseMember {
         if version >= 5 {
             NullableString(version >= 6).encode(buf, self.group_instance_id.as_deref())?;
         }
-        NullableBytes(version >= 6).encode(buf, &self.metadata)?;
+        NullableBytes32(version >= 6).encode(buf, &self.metadata)?;
         if version >= 6 {
             RawTaggedFieldList.encode(buf, &self.unknown_tagged_fields)?;
         }
@@ -140,7 +140,7 @@ impl Serializable for JoinGroupResponseMember {
         if version >= 5 {
             res += NullableString(version >= 6).calculate_size(self.group_instance_id.as_deref());
         }
-        res += NullableBytes(version >= 6).calculate_size(&self.metadata);
+        res += NullableBytes32(version >= 6).calculate_size(&self.metadata);
         if version >= 6 {
             res += RawTaggedFieldList.calculate_size(&self.unknown_tagged_fields);
         }
